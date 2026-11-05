@@ -1,0 +1,14 @@
+/* Next.js App Router 全局样式入口
+ *
+ * 脚手架不附带任何主题样式——所有 className 都是裸 DOM 钩子，
+ * 由主题作者自带样式系统（Tailwind / CSS Modules / 手写 CSS 均可）。
+ *
+ * 这里只放与数据层行为挂钩的最小全局规则，做主题时按需保留或删除。
+ */
+
+/* 失联/禁止友链：纯文字+删除线，不可点击 */
+.link-friend.is-offline {
+  opacity: .6;
+  cursor: default;
+  pointer-events: none;
+}
