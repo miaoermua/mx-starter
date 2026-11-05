@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MX_CORE_URL, MX_SSR_UA, apiUrl } from '@/lib/api/config'
+import { MX_CORE_URL, apiUrl } from '@/lib/api/config'
+import { proxyHeaders } from '@/lib/api/proxy'
 
 /**
  * 点赞代理 route（M8）
  *
  * 客户端不直接调 core（跨域 + SpiderGuard），走同源 route 代理。
- * POST /api/activity/like { id }
+ * POST /api/activity/like { id, type }
  */
 export async function POST(request: NextRequest) {
   if (!MX_CORE_URL) {
@@ -16,10 +17,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const res = await fetch(apiUrl('/activity/like'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': MX_SSR_UA,
-    },
+    headers: proxyHeaders(request),
     body: JSON.stringify(body),
   })
 

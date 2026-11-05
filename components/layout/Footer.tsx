@@ -13,7 +13,8 @@ import { RouteLoader } from './RouteLoader'
  */
 export async function Footer({ aggregate }: { aggregate: AggregateData }) {
   const siteName = aggregate.seo?.title || 'mx-starter'
-  const siteUrl = aggregate.url?.siteUrl || '/'
+  // core v12.x 的 aggregate.url 只有 webUrl（adminUrl 已被摘掉）
+  const siteUrl = aggregate.url?.webUrl || '/'
 
   const [recentPosts, recentNotes, pages]: [
     PostSummary[],

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MX_CORE_URL, MX_SSR_UA, apiUrl } from '@/lib/api/config'
+import { MX_CORE_URL, apiUrl } from '@/lib/api/config'
+import { proxyHeaders } from '@/lib/api/proxy'
 
 /**
  * 评论写入代理 route（C8）
@@ -25,15 +26,13 @@ export async function POST(request: NextRequest) {
 
   const res = await fetch(apiUrl(`/comments/guest/${id}`), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': MX_SSR_UA,
-    },
+    headers: proxyHeaders(request),
     body: JSON.stringify(payload),
   })
 
   const data = await res.json().catch(() => ({}))
-  // core 审核开启时返回的 state 可能不是 Read，前端据此提示
-  const needAudit = res.status === 200 && data.state !== undefined && data.state !== 'Read'
+  // core v12.x 的 state 是数字枚举（1 = Read，即无需审核）
+  const doc = (data?.data ?? data) as Record<string, unknown>
+  const needAudit = res.ok && doc?.state !== undefined && Number(doc.state) !== 1
   return NextResponse.json({ ...data, needAudit }, { status: res.status })
 }

@@ -5,10 +5,18 @@ import { useEffect, useRef } from 'react'
 /**
  * 阅读数上报（M8）
  *
- * 文章页首屏挂载后，POST /api/ack 上报阅读数。
+ * core v12.x 的 POST /ack 请求体是
+ * `{ type: 'read', payload: { type: 'post' | 'note', id } }`，
+ * 旧实现的 `{ id }` 会被 400 拒绝。
  * 同一文章 ID 在同一 session 只上报一次（防止刷新刷量）。
  */
-export function ReadAck({ postId }: { postId: string }) {
+export function ReadAck({
+  postId,
+  type = 'post',
+}: {
+  postId: string
+  type?: 'post' | 'note' | 'page'
+}) {
   const reported = useRef(false)
 
   useEffect(() => {
@@ -26,11 +34,11 @@ export function ReadAck({ postId }: { postId: string }) {
     fetch('/api/ack', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: postId }),
+      body: JSON.stringify({ type: 'read', payload: { type, id: postId } }),
     }).catch(() => {
       // 静默失败
     })
-  }, [postId])
+  }, [postId, type])
 
   return null
 }

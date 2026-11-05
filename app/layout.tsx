@@ -6,7 +6,8 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { ThemeRuntime } from '@/components/layout/ThemeRuntime'
 import { Lightbox } from '@/components/content/Lightbox'
-import { fetchAggregate, fetchPages, fetchSnippet, THEME_NAME } from '@/lib/api'
+import { fetchPages, fetchSnippet, THEME_NAME } from '@/lib/api'
+import { getAggregate } from '@/lib/api/server'
 import { mergeThemeConfig, type ThemeConfig } from '@/lib/theme-config'
 
 /**
@@ -22,7 +23,7 @@ function readThemeCookie(): boolean {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const agg = await fetchAggregate()
+  const agg = await getAggregate()
   const seo = agg.seo || {}
   return {
     title: {
@@ -47,7 +48,7 @@ export default async function RootLayout({
   const isDark = readThemeCookie()
   const bodyClass = isDark ? 'dark' : undefined
 
-  const agg = await fetchAggregate()
+  const agg = await getAggregate()
   // 主题配置：Snippet（reference=theme, name=THEME_NAME）与 aggregate.theme 合并
   const snippet = await fetchSnippet('theme', THEME_NAME)
   const themeFromAggregate = agg.theme as Partial<ThemeConfig> | undefined

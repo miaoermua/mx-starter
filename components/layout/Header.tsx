@@ -40,7 +40,11 @@ export function Header({
         <Link href="/">首页</Link>
         <Link href="/archive">归档</Link>
         <Link href="/notes">日记</Link>
+        <Link href="/says">说说</Link>
         <Link href="/timeline">时间轴</Link>
+        <Link href="/recently">动态</Link>
+        <Link href="/tags">标签</Link>
+        <Link href="/projects">项目</Link>
         <Link href="/friends">朋友们</Link>
         {/* 站点：独立页面聚合入口 + 下拉菜单 */}
         <div className="has-child">

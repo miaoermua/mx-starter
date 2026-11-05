@@ -19,17 +19,10 @@ export const mockAggregate: AggregateData = {
     description: 'mx-starter · Mix Space 前端脚手架演示站',
     keywords: 'mx-starter, mx-space, next.js',
   },
-  url: { siteUrl: 'https://example.com' },
+  url: { webUrl: 'https://example.com' },
   theme: {},
-  categories: [
-    { id: '1', name: '随笔与杂谈', slug: 'essay', count: 12 },
-    { id: '2', name: '技术笔记', slug: 'tech', count: 8 },
-    { id: '3', name: '日常记录', slug: 'daily', count: 5 },
-  ],
-  pages: [
-    { title: '关于我', slug: 'about' },
-    { title: '朋友们', slug: 'friends' },
-  ],
+  commentOptions: { disableComment: false, allowGuestComment: true },
+  ai: { enableSummary: false },
 }
 
 export const mockPosts: PostSummary[] = [
@@ -42,7 +35,7 @@ export const mockPosts: PostSummary[] = [
     tags: ['主题', 'Typecho'],
     summary: '这是一篇演示文章，用来展示列表页的文章卡片与元信息。',
     created: '2026-10-13T10:00:00.000Z',
-    count: { read: 1024, like: 32, comments: 8 },
+    count: { read: 1024, like: 32 },
   },
   {
     id: '2',
@@ -53,7 +46,7 @@ export const mockPosts: PostSummary[] = [
     tags: ['Next.js', 'React'],
     summary: '从 Typecho PHP 模板迁移到 Next.js App Router 的实践记录，样式逐字节复用。',
     created: '2026-10-20T08:30:00.000Z',
-    count: { read: 512, like: 18, comments: 3 },
+    count: { read: 512, like: 18 },
   },
   {
     id: '3',
@@ -64,7 +57,7 @@ export const mockPosts: PostSummary[] = [
     tags: ['CSS', 'SSR'],
     summary: 'SSR 阶段读 cookie 输出 dark-theme class，避免刷新时的白色闪屏。',
     created: '2026-10-28T14:00:00.000Z',
-    count: { read: 256, like: 9, comments: 1 },
+    count: { read: 256, like: 9 },
   },
 ]
 
@@ -85,7 +78,6 @@ console.log('Hello, mx-space!')
 - 列表项三
 
 [脚手架仓库](https://github.com/miaoermua/mx-starter)`,
-  allowComment: true,
 }
 
 export function mockPage(slug: string): PageDetail | null {
@@ -100,13 +92,16 @@ export function mockPage(slug: string): PageDetail | null {
 
 这篇文章上次修改于很多天前，可能其部分内容已经发生变化。`,
       created: '2026-01-01T00:00:00.000Z',
-      allowComment: true,
     }
   }
   return null
 }
 
-export const mockCategories: Category[] = mockAggregate.categories || []
+export const mockCategories: Category[] = [
+  { id: '1', name: '随笔与杂谈', slug: 'essay', count: 12 },
+  { id: '2', name: '技术笔记', slug: 'tech', count: 8 },
+  { id: '3', name: '日常记录', slug: 'daily', count: 5 },
+]
 
 export const mockComments: Comment[] = [
   {

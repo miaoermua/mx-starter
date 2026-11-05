@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MX_CORE_URL, MX_SSR_UA, apiUrl } from '@/lib/api/config'
+import { proxyHeaders } from '@/lib/api/proxy'
 
 /**
  * 友链自助申请代理 route（M1/A17）
@@ -16,10 +17,7 @@ export async function POST(request: NextRequest) {
 
   const res = await fetch(apiUrl('/links/audit'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': MX_SSR_UA,
-    },
+    headers: proxyHeaders(request),
     body: JSON.stringify(body),
   })
 

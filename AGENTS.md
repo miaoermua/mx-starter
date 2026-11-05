@@ -34,6 +34,14 @@ Mix Space **通用主题脚手架**：core v12.x（API v2，SDK 4.4.0）+ Next.j
 - v3 适配：从 main 切 `next` 分支开发，成熟前不要合回；v3 定案后翻转默认分支，v2 留维护分支。
 - core 若发布 v13+，不要在 main 上兼容两代，走 next 分支。
 
+## Markdown 扩展
+
+`lib/markdown-extensions.ts` 是 mx 标准语法的唯一实现处（spoiler / katex / mention / gallery / banner / figure / mermaid），`lib/markdown.ts` 只做调用与链接卡片分段。
+
+- **新增语法必须对齐 core 的语法契约**（产物 class 与结构一致），不要在语法层自创新写法。
+- core 的 `apps/` 是 AGPL-3.0，**不要拷贝其源码**；按语法行为独立实现，本仓库是 GPL-3.0。
+- 语法实现只依赖 marked，不要在这里引入 React 或数据层依赖。
+
 ## 可选扩展
 
 `app/api/link-preview/`、`lib/link-cards.ts`、`lib/link-preview.ts`、`components/content/LinkCard.tsx` 是一组（kami 移植的链接卡片），互相依赖，增删必须整组进行。文件头有标注。

@@ -1,17 +1,24 @@
 import Link from 'next/link'
-import { fetchCategories, fetchPosts } from '@/lib/api'
+import { fetchCategories, fetchTimeline } from '@/lib/api'
 
 /**
  * 归档页（线上完整版 → ArchiveIndexPage）
+ *
+ * 数据来自 core GET /aggregate/timeline（一次返回全部已发布的文章与日记，
+ * 不分页；旧实现只取 /posts 前 50 篇，归档会缺内容）。
  *
  * DOM 契约：section.page-title + article.page-content；
  * .archives-head > a*（分类计数胶囊）；分组 h1 + ul.archives-list > li > a + span.date
  */
 export default async function ArchivePage() {
-  const [categories, { items: posts }] = await Promise.all([
+  const [categories, items] = await Promise.all([
     fetchCategories(),
-    fetchPosts(1, 50),
+    fetchTimeline(undefined, { sort: -1 }),
   ])
+
+  const years = [...new Set(items.map((i) => new Date(i.created).getFullYear()))].sort(
+    (a, b) => b - a,
+  )
 
   return (
     <main>
@@ -24,27 +31,32 @@ export default async function ArchivePage() {
           <div className="archives-head">
             {categories.map((c) => (
               <Link key={c.id} href={`/category/${c.slug}`}>
-                {c.name} ({c.count})
+                {c.name}
+                {c.count ? ` (${c.count})` : ''}
               </Link>
             ))}
           </div>
-          {/* 按分类分组 */}
-          {categories.map((cat) => {
-            const groupPosts = posts.filter((p) => p.categorySlug === cat.slug)
-            if (groupPosts.length === 0) return null
-            return (
-              <div key={cat.id}>
-                <h1>{cat.name}</h1>
-                <ul className="archives-list">
-                  {groupPosts.map((post) => (
-                    <li key={post.id}>
+          {/* 按年份分组，文章与日记混排 */}
+          {years.map((year) => (
+            <div key={year}>
+              <h1>{year}</h1>
+              <ul className="archives-list">
+                {items
+                  .filter((i) => new Date(i.created).getFullYear() === year)
+                  .map((item) => (
+                    <li key={`${item.type}-${item.id}`}>
                       <Link
-                        href={`/posts/${post.categorySlug || cat.slug}/${post.slug}`}
+                        href={
+                          item.type === 'note'
+                            ? `/notes/${item.nid ?? item.slug}`
+                            : `/posts/${item.categorySlug || 'uncategorized'}/${item.slug}`
+                        }
                       >
-                        {post.title}
+                        {item.type === 'note' && <span className="note-badge">手记 </span>}
+                        {item.title || '无标题'}
                       </Link>
                       <span className="date">
-                        {new Date(post.created)
+                        {new Date(item.created)
                           .toLocaleDateString('zh-CN', {
                             year: '2-digit',
                             month: '2-digit',
@@ -54,10 +66,10 @@ export default async function ArchivePage() {
                       </span>
                     </li>
                   ))}
-                </ul>
-              </div>
-            )
-          })}
+              </ul>
+            </div>
+          ))}
+          {items.length === 0 && <p>没有找到结果 (QWQ)</p>}
         </article>
       </div>
     </main>

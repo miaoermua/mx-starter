@@ -1,4 +1,8 @@
+'use client'
+
+import { useState } from 'react'
 import type { Comment } from '@/lib/api'
+import { buildReplyTree } from '@/lib/api/adapter'
 import { CommentContent } from './CommentContent'
 
 /**
@@ -33,13 +37,48 @@ export function CommentItem({
   /** 父评论（用于子评论渲染 @被回复者 引用） */
   parent?: Comment
 }) {
-  const hasChildren = comment.children && comment.children.length > 0
+  // core 对长线程只返回头尾（replyWindow.hasHidden），中间部分靠 /api/comments/thread 分批补
+  const [children, setChildren] = useState<Comment[]>(comment.children ?? [])
+  const [replyWindow, setReplyWindow] = useState(comment.window)
+  const [expanding, setExpanding] = useState(false)
+
+  const hasChildren = children.length > 0
 
   const onReply = (e: React.MouseEvent) => {
     e.preventDefault()
     document.dispatchEvent(
       new CustomEvent('mx:reply', { detail: { id: comment.id } }),
     )
+  }
+
+  const flatten = (list: Comment[]): Comment[] =>
+    list.flatMap((c) => [c, ...flatten(c.children ?? [])])
+
+  const expandThread = async () => {
+    if (!replyWindow?.hasHidden || expanding) return
+    setExpanding(true)
+    try {
+      const qs = new URLSearchParams({ rootId: comment.id })
+      if (replyWindow.nextCursor) qs.set('cursor', replyWindow.nextCursor)
+      const res = await fetch(`/api/comments/thread?${qs}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const added: Comment[] = Array.isArray(data.items) ? data.items : []
+      // 服务端返回的也是一棵树，先拍平再和新数据一起重建
+      setChildren((prev) =>
+        buildReplyTree([...flatten(prev), ...flatten(added)], comment.id),
+      )
+      setReplyWindow({
+        ...replyWindow,
+        hasHidden: !data.done,
+        hiddenCount: Number(data.remaining ?? 0),
+        nextCursor: data.nextCursor ?? undefined,
+      })
+    } catch {
+      // 静默失败
+    } finally {
+      setExpanding(false)
+    }
   }
 
   return (
@@ -77,10 +116,18 @@ export function CommentItem({
 
       {hasChildren && (
         <div className="comment-list">
-          {comment.children!.map((child) => (
+          {children.map((child) => (
             <CommentItem key={child.id} comment={child} postId={postId} parent={comment} />
           ))}
         </div>
+      )}
+
+      {replyWindow?.hasHidden && (
+        <p className="comment-expand">
+          <button type="button" onClick={expandThread} disabled={expanding}>
+            {expanding ? '加载中…' : `展开更多回复（还有 ${replyWindow.hiddenCount} 条）`}
+          </button>
+        </p>
       )}
     </div>
   )

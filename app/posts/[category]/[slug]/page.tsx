@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { fetchPostDetail, fetchAdjacentPosts, fetchComments } from '@/lib/api'
+import { getAggregate } from '@/lib/api/server'
 import { renderMarkdownSegments } from '@/lib/markdown'
 import { resolveLinkCards } from '@/lib/link-cards'
 import { ArticleTree } from '@/components/content/ArticleTree'
@@ -42,7 +43,11 @@ export default async function PostPage({
     post.categorySlug,
   )
 
-  const comments = await fetchComments(post.id, 1, 10)
+  const [comments, aggregate] = await Promise.all([
+    fetchComments(post.id, 1, 10),
+    getAggregate(),
+  ])
+  const commentTotal = comments.pagination?.total ?? comments.items.length
 
   return (
     <main>
@@ -60,7 +65,7 @@ export default async function PostPage({
             {typeof post.count?.read === 'number' && (
               <span className="view">{post.count.read}</span>
             )}
-            <span className="comments">{post.count?.comments ?? 0}</span>
+            <span className="comments">{commentTotal}</span>
           </div>
         </section>
 
@@ -134,16 +139,37 @@ export default async function PostPage({
           </section>
         )}
 
+        {/* 相关文章：core 详情接口直接返回 related */}
+        {post.related && post.related.length > 0 && (
+          <section className="post-related">
+            <ul>
+              {post.related.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={`/posts/${item.categorySlug || 'uncategorized'}/${item.slug}`}
+                  >
+                    {item.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* 阅读数上报（M8）：首屏触发一次 */}
-        <ReadAck postId={post.id} />
+        <ReadAck postId={post.id} type="post" />
 
         {/* 点赞按钮（M8） */}
-        <LikeButton postId={post.id} initialLikes={post.count?.like ?? 0} />
+        <LikeButton
+          postId={post.id}
+          initialLikes={post.count?.like ?? 0}
+          initialLiked={post.liked}
+        />
 
         {/* 评论区（S4）：SSR 预取第 1 页注水给客户端组件 */}
         <CommentSection
           postId={post.id}
-          allowComment={post.allowComment}
+          allowComment={!aggregate.commentOptions?.disableComment}
           initialItems={comments.items}
           initialTotal={comments.pagination?.total ?? comments.items.length}
           initialPage={comments.pagination?.page ?? 1}

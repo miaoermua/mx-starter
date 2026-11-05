@@ -1,8 +1,11 @@
-import { fetchNote } from '@/lib/api'
+import { fetchComments, fetchNoteWithAccess } from '@/lib/api'
+import { getAggregate } from '@/lib/api/server'
 import { notFound } from 'next/navigation'
 import { renderMarkdown } from '@/lib/markdown'
 import { ArticleTree } from '@/components/content/ArticleTree'
 import { LikeButton } from '@/components/post/LikeButton'
+import { ReadAck } from '@/components/post/ReadAck'
+import { CommentSection } from '@/components/comment/CommentSection'
 
 /**
  * 日记详情（mx 特性 → NotePage，M3）
@@ -12,12 +15,43 @@ import { LikeButton } from '@/components/post/LikeButton'
  */
 export default async function NotePage({
   params,
+  searchParams,
 }: {
   params: { nid: string }
+  searchParams?: { password?: string }
 }) {
-  const note = await fetchNote(params.nid)
-  if (!note) notFound()
+  const password = searchParams?.password
+  const { note, locked } = await fetchNoteWithAccess(params.nid, password)
+  if (!note) {
+    // 加密日记：core 返回 403，展示密码表单而不是 404
+    if (locked) {
+      return (
+        <main>
+          <div className="wrap min">
+            <section className="post-title">
+              <h2>日记已加密</h2>
+            </section>
+            <form className="post-password" method="get">
+              <input
+                type="password"
+                name="password"
+                placeholder="输入访问密码"
+                required
+              />
+              <button type="submit">查看</button>
+            </form>
+          </div>
+        </main>
+      )
+    }
+    notFound()
+  }
 
+  const [comments, aggregate] = await Promise.all([
+    fetchComments(note.id, 1, 10),
+    getAggregate(),
+  ])
+  const commentTotal = comments.pagination?.total ?? comments.items.length
   const html = renderMarkdown(note.content)
 
   return (
@@ -36,6 +70,7 @@ export default async function NotePage({
             {typeof note.readCount === 'number' && (
               <span className="view">{note.readCount}</span>
             )}
+            <span className="comments">{commentTotal}</span>
           </div>
         </section>
 
@@ -46,8 +81,26 @@ export default async function NotePage({
         {/* 目录树 */}
         <ArticleTree markdownText={note.content} />
 
+        {/* 阅读数上报：core 的 type 是 post / note */}
+        <ReadAck postId={note.id} type="note" />
+
         {/* 点赞按钮 */}
-        <LikeButton postId={note.id} initialLikes={note.likeCount ?? 0} />
+        <LikeButton
+          postId={note.id}
+          type="note"
+          initialLikes={note.likeCount ?? 0}
+          initialLiked={note.liked}
+        />
+
+        {/* 评论区：core 按 refId 查询，不区分 ref 类型 */}
+        <CommentSection
+          postId={note.id}
+          allowComment={!aggregate.commentOptions?.disableComment}
+          initialItems={comments.items}
+          initialTotal={commentTotal}
+          initialPage={comments.pagination?.page ?? 1}
+          initialTotalPages={comments.pagination?.totalPages ?? 1}
+        />
       </div>
     </main>
   )

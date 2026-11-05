@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MX_CORE_URL, MX_SSR_UA, apiUrl } from '@/lib/api/config'
+import { MX_CORE_URL, apiUrl } from '@/lib/api/config'
+import { proxyHeaders } from '@/lib/api/proxy'
 
 /**
  * 阅读数上报代理 route（M8）
@@ -14,10 +15,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const res = await fetch(apiUrl('/ack'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': MX_SSR_UA,
-    },
+    headers: proxyHeaders(request),
     body: JSON.stringify(body),
   })
 

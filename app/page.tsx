@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { fetchAggregate, fetchPosts } from '@/lib/api'
+import { fetchPosts } from '@/lib/api'
+import { getAggregate } from '@/lib/api/server'
 
 /**
  * 首页（index.php → HomePage）
@@ -16,7 +17,7 @@ export default async function HomePage({
 }: {
   searchParams: { page?: string }
 }) {
-  const agg = await fetchAggregate()
+  const agg = await getAggregate()
   const page = Math.max(1, Number(searchParams.page || '1'))
   const { items: posts, pagination } = await fetchPosts(page, 10)
 
@@ -52,6 +53,8 @@ export default async function HomePage({
           {posts.map((post) => (
             <div className="post-item" key={post.id}>
               <h2>
+                {/* core 列表默认把置顶文章排在前面，pinAt 供主题打「置顶」角标 */}
+                {post.pinAt && <span className="pin">置顶 </span>}
                 <Link
                   href={`/posts/${post.categorySlug || 'uncategorized'}/${post.slug}`}
                 >

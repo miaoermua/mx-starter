@@ -32,6 +32,21 @@ app/api/link-preview + lib/link-cards + components/content/LinkCard
 public/vendor/prism.js  代码高亮运行时
 ```
 
+## Markdown（按 core 语法标准实现）
+
+| 语法 | 产物 |
+| --- | --- |
+| `\|\|剧透\|\|` | `<span class="spoiler">` |
+| `$E=mc^2$` | `<span class="katex-render">`（公式渲染接主题的 KaTeX） |
+| `{GH@user}` `{TW@user}` `{TG@user}` | `<a class="mention">` |
+| `::: gallery` … `:::` | `<div class="container">` 图片组 |
+| `::: banner {params}` … `:::` | `<div class="container banner {params}">` |
+| `![!图注](/img.jpg)` | `<figure><img><figcaption>` |
+| ` ```mermaid ` | `<pre class="mermaid">` |
+| `[^1]: URL` + `[^1]` | 链接卡片（脚手架自带扩展，可移除） |
+
+通用：标题自动加 `id="title-N"`，代码块带 `language-xxx` 供 Prism 高亮，站外链接自动 `target=_blank`。实现见 `lib/markdown-extensions.ts`。
+
 ## 做新主题
 
 1. 自带你的样式系统（Tailwind / CSS Modules / 手写均可），给 `app/`、`components/` 里的裸 className 上样式；
