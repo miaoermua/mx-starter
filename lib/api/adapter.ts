@@ -80,17 +80,28 @@ export interface Pagination {
 export function parsePagination(raw: AnyObj): Pagination | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const p = camelKeys<AnyObj>(raw)
-  // 后端字段：current_page / total_page / has_next_page / has_prev_page
-  // camelKeys 转成 currentPage / totalPage / hasNextPage / hasPrevPage
+  // 两套字段名都要认：
+  // - v12：current_page / total_page / has_next_page / has_prev_page
+  // - v3 ：page / size / total / totalPages（没有 hasNext/hasPrev，按页码推导）
   const page = Number(p.currentPage ?? p.page)
   if (isNaN(page)) return undefined
+  const totalPages = Number(p.totalPage ?? p.totalPages)
+  const hasPrevRaw = p.hasPrevPage ?? p.hasPrev
+  const hasNextRaw = p.hasNextPage ?? p.hasNext
+  const size = Number(p.size)
+  const total = Number(p.total)
+  // 不完整的分页字段补 0，避免 NaN 冒到 UI（page 缺失才是真的没有分页）
   return {
     page,
-    size: Number(p.size),
-    total: Number(p.total),
-    totalPages: Number(p.totalPage ?? p.totalPages),
-    hasPrev: !!(p.hasPrevPage ?? p.hasPrev),
-    hasNext: !!(p.hasNextPage ?? p.hasNext),
+    size: Number.isFinite(size) ? size : 0,
+    total: Number.isFinite(total) ? total : 0,
+    totalPages: Number.isFinite(totalPages) ? totalPages : 0,
+    // 显式字段优先，缺失时用页码推导；0 是有效值，不能用 ||
+    hasPrev: typeof hasPrevRaw === 'boolean' ? hasPrevRaw : page > 1,
+    hasNext:
+      typeof hasNextRaw === 'boolean'
+        ? hasNextRaw
+        : Number.isFinite(totalPages) && page < totalPages,
   }
 }
 
@@ -151,9 +162,10 @@ export function adaptPost(raw: AnyObj): PostSummary {
     pinAt: p.pinAt ? String(p.pinAt) : undefined,
     isPublished: p.isPublished as boolean | undefined,
     count: {
-      // core v12.x：列表/详情在 read_count / like_count 顶层字段
-      read: p.readCount as number | undefined,
-      like: p.likeCount as number | undefined,
+      // v3：readCount / likeCount 顶层数字；v12：同名顶层字段或 count.read / count.like
+      // 0 是有效值，所以用 ?? 而不是 ||
+      read: (p.readCount ?? count?.read) as number | undefined,
+      like: (p.likeCount ?? count?.like) as number | undefined,
     },
     // cover 可能是字符串或 { src, ... } 对象
     cover: typeof p.cover === 'string'
@@ -170,18 +182,50 @@ export function adaptPost(raw: AnyObj): PostSummary {
   }
 }
 
-/** 适配文章详情 */
-export function adaptPostDetail(raw: AnyObj): PostDetail {
+/** 正文格式。v12 没有该字段，按 markdown 处理以保持既有管线 */
+export type BodyFormat = 'markdown' | 'lexical' | 'unknown'
+
+/**
+ * 识别正文格式。
+ *
+ * - 缺省（v12 / 未声明）→ markdown：老库一直是 Markdown，不能因为缺字段就拒绝渲染；
+ * - `'lexical'` → 明确识别，**绝不能**把 Lexical JSON 或它的纯文本 fallback
+ *   当成 Markdown 走 marked（会渲染出乱码式结果）；
+ * - 其他未知值 → unknown，同样不渲染。
+ */
+export function resolveBodyFormat(raw?: string | null): BodyFormat {
+  if (raw === undefined || raw === null || raw === '') return 'markdown'
+  const value = String(raw).toLowerCase()
+  if (value === 'markdown') return 'markdown'
+  if (value === 'lexical') return 'lexical'
+  return 'unknown'
+}
+
+/**
+ * 适配文章详情。
+ *
+ * `meta` 是 v3 的信封 meta（`{ interaction, related, … }`）：
+ * - v3 的点赞态在 `meta.interaction.isLiked`，**不在** body 里；
+ * - v3 的相关文章在 `meta.related`（`{ id, title, slug, nid, type }`），
+ *   且 body 里的 `related` 已被 core 摘掉。
+ * 两者都优先取 body（v12 形态），缺失时回落到 meta。
+ */
+export function adaptPostDetail(raw: AnyObj, meta?: AnyObj): PostDetail {
   const base = adaptPost(raw)
   const p = camelKeys<AnyObj>(raw)
+  const m = meta ? camelKeys<AnyObj>(meta) : undefined
+  const interaction = m?.interaction as AnyObj | undefined
+  const relatedRaw = Array.isArray(p.related)
+    ? (p.related as AnyObj[])
+    : Array.isArray(m?.related)
+      ? (m.related as AnyObj[])
+      : undefined
   return {
     ...base,
     text: String(p.text ?? ''),
     contentFormat: p.contentFormat as string | undefined,
-    related: Array.isArray(p.related)
-      ? (p.related as AnyObj[]).map(adaptPost)
-      : undefined,
-    liked: p.liked as boolean | undefined,
+    related: relatedRaw?.map(adaptPost),
+    liked: (p.liked ?? interaction?.isLiked) as boolean | undefined,
   }
 }
 
@@ -235,6 +279,14 @@ export function adaptTag(raw: AnyObj): Tag {
 
 /* ---------- 评论 ---------- */
 
+/** v3 的 `parent` 字段是父评论预览对象，不是 id */
+export interface CommentParentPreview {
+  id: string
+  author?: string
+  text?: string
+  isDeleted?: boolean
+}
+
 export interface Comment {
   id: string
   author: string
@@ -249,6 +301,8 @@ export interface Comment {
   /** 评论线程根 id（core 的 rootCommentId） */
   root?: string
   replyCount?: number
+  /** 父评论被分页截断时 core 附带的上下文预览（v3） */
+  parentPreview?: CommentParentPreview
   children?: Comment[]
   /** core 的 replyWindow：长线程只返回头部+尾部，中间的回复要靠 /comments/thread 分页补 */
   window?: CommentWindow
@@ -265,20 +319,42 @@ export interface CommentWindow {
 
 export function adaptComment(raw: AnyObj): Comment {
   const p = camelKeys<AnyObj>(raw)
-  // core v12.x：内容在 text 字段，子评论在 replies（扁平回复列表），父级在 parent_comment_id
+  // 内容字段：v12/v3 都在 text；content 只在少数历史形态里出现，且必须是字符串
   const childrenRaw = (p.replies ?? p.children) as AnyObj[] | undefined
+  // v3 的 parent 是 `{ id, author, text, isDeleted }` 预览对象，v12 的 parent 是 id 字符串。
+  // 绝不能把预览对象当 id 用（否则树构建时 Map.get 到 undefined，回复会被丢到顶层）
+  const previewRaw =
+    p.parent && typeof p.parent === 'object' && !Array.isArray(p.parent)
+      ? (p.parent as AnyObj)
+      : null
+  const parentId =
+    typeof p.parentCommentId === 'string'
+      ? p.parentCommentId
+      : typeof p.parent === 'string'
+        ? p.parent
+        : undefined
+  const content =
+    typeof p.content === 'string' ? p.content : String(p.text ?? '')
   return {
     id: String(p.id ?? p._id ?? ''),
     author: String(p.author ?? ''),
     avatar: p.avatar as string | undefined,
-    content: String(p.content ?? p.text ?? ''),
+    content,
     created: String(p.createdAt ?? p.created ?? ''),
     url: p.url as string | undefined,
     isWhispers: p.isWhispers as boolean | undefined,
     pin: p.pin as boolean | undefined,
-    parent: (p.parentCommentId ?? p.parent) as string | undefined,
-    root: p.rootCommentId as string | undefined,
+    parent: parentId,
+    root: typeof p.rootCommentId === 'string' ? p.rootCommentId : undefined,
     replyCount: p.replyCount as number | undefined,
+    parentPreview: previewRaw
+      ? {
+          id: String(previewRaw.id ?? ''),
+          author: previewRaw.author as string | undefined,
+          text: previewRaw.text as string | undefined,
+          isDeleted: previewRaw.isDeleted as boolean | undefined,
+        }
+      : undefined,
     children: childrenRaw?.map(adaptComment),
     window: adaptCommentWindow(p.replyWindow),
   }
@@ -298,13 +374,37 @@ function adaptCommentWindow(raw: unknown): CommentWindow | undefined {
 }
 
 /**
- * core 的 `data[].replies` 是**扁平**回复列表（按 root 聚合，带 parentCommentId），
- * 不是嵌套树。这里按 parentCommentId 还原成树，供 `comment-child` 递归渲染。
+ * 把可能已嵌套的回复拍平（先序），并在缺失时用遍历上下文补上 parent。
+ *
+ * v12 的 `replies` 是扁平列表；v3 的每条评论可自带 `replies` 子数组（嵌套）。
+ * `buildReplyTree` 只认扁平输入，直接喂嵌套树会把孙级丢掉，所以先拍平。
+ */
+function flattenReplies(list: Comment[], parentId?: string): Comment[] {
+  const out: Comment[] = []
+  for (const item of list) {
+    out.push({
+      ...item,
+      parent: item.parent ?? parentId,
+      children: undefined,
+    })
+    if (item.children?.length) {
+      out.push(...flattenReplies(item.children, item.id))
+    }
+  }
+  return out
+}
+
+/**
+ * core 的 `data[].replies` 是回复列表（按 root 聚合，带 parentCommentId），
+ * 这里按 parentCommentId 还原成树，供 `comment-child` 递归渲染。
  * 父评论被 replyWindow 截断时（不在本页）退化为顶层子评论，不丢内容。
+ *
+ * 输入既可以是扁平列表，也可以是 v3 那种已经嵌套的 replies——拍平后重建，
+ * 保证两种形态得到同一棵树，且孙级不会丢。
  */
 export function nestCommentReplies(list: Comment[]): Comment[] {
   return list.map((root) => {
-    const flat = root.children ?? []
+    const flat = flattenReplies(root.children ?? [], root.id)
     if (flat.length === 0) return root
     return { ...root, children: buildReplyTree(flat, root.id) }
   })
@@ -415,8 +515,10 @@ export interface Note {
   images?: string[]
 }
 
-export function adaptNote(raw: AnyObj): Note {
+export function adaptNote(raw: AnyObj, meta?: AnyObj): Note {
   const p = camelKeys<AnyObj>(raw)
+  const m = meta ? camelKeys<AnyObj>(meta) : undefined
+  const interaction = m?.interaction as AnyObj | undefined
   const format = p.contentFormat as string | undefined
   const content =
     format === 'lexical'
@@ -437,8 +539,9 @@ export function adaptNote(raw: AnyObj): Note {
     bookmark: p.bookmark as boolean | undefined,
     hasPassword: p.hasPassword as boolean | undefined,
     readCount: p.readCount as number | undefined,
-    likeCount: p.likeCount as number | undefined,
-    liked: p.liked as boolean | undefined,
+    likeCount: (p.likeCount ?? interaction?.likeCount) as number | undefined,
+    // v3 的点赞态在 meta.interaction.isLiked，v12 在 body 顶层
+    liked: (p.liked ?? interaction?.isLiked) as boolean | undefined,
     images: Array.isArray(p.images)
       ? (p.images as unknown[])
           .map((img) => (typeof img === 'string' ? img : (img as AnyObj)?.src))

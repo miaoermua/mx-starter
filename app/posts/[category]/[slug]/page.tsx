@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { fetchPostDetail, fetchAdjacentPosts, fetchComments } from '@/lib/api'
 import { getAggregate } from '@/lib/api/server'
+import { resolveBodyFormat } from '@/lib/api/adapter'
 import { renderMarkdownSegments } from '@/lib/markdown'
 import { resolveLinkCards } from '@/lib/link-cards'
 import { ArticleTree } from '@/components/content/ArticleTree'
@@ -30,8 +31,13 @@ export default async function PostPage({
   const post = await fetchPostDetail(params.category, params.slug)
   if (!post) notFound()
 
+  // 正文格式：markdown 走现有 marked 管线；lexical 本轮不引入渲染器，显式提示而不是硬渲染
+  const bodyFormat = resolveBodyFormat(post.contentFormat)
+  const isMarkdown = bodyFormat === 'markdown'
   // 链接卡片（脚手架自带：kami 扩展移植）：脚注解析 + SSR 并发预取，失败降级为朴素链接卡
-  const { segments, cards } = renderMarkdownSegments(post.text)
+  const rendered = isMarkdown ? renderMarkdownSegments(post.text) : null
+  const segments = rendered?.segments ?? []
+  const cards = rendered?.cards ?? []
   const cardData = cards.length > 0 ? await resolveLinkCards(cards) : new Map<string, null>()
   const modified = post.modified ? new Date(post.modified) : null
   const showStaleWarning =
@@ -47,7 +53,8 @@ export default async function PostPage({
     fetchComments(post.id, 1, 10),
     getAggregate(),
   ])
-  const commentTotal = comments.pagination?.total ?? comments.items.length
+  // total 可能在 core 侧缺失（补 0），用实际取到的条数兜底，避免显示出 0 条
+  const commentTotal = Math.max(comments.pagination?.total ?? 0, comments.items.length)
 
   return (
     <main>
@@ -77,6 +84,14 @@ export default async function PostPage({
               天前，可能其部分内容已经发生变化，如有疑问可询问作者。
             </blockquote>
           )}
+        {/* Lexical 正文：本轮不引入渲染器，给出明确提示，不把编辑器 JSON 当 Markdown 渲染 */}
+        {bodyFormat !== 'markdown' && (
+          <blockquote>
+            {bodyFormat === 'lexical'
+              ? '本文使用 Lexical 编辑器撰写，当前主题暂不支持渲染该格式，请前往原文查看。'
+              : '无法识别的正文格式，请前往原文查看。'}
+          </blockquote>
+        )}
         {/* 正文：分段渲染。无卡片脚注时等价原单段 HTML；卡片为 kami 扩展能力（脚手架自带：kami 扩展移植） */}
         {segments.map((seg, i) => {
           if (seg.type === 'html') {
@@ -96,8 +111,8 @@ export default async function PostPage({
         })}
       </article>
 
-        {/* 目录树 */}
-        <ArticleTree markdownText={post.text} />
+        {/* 目录树：只有 Markdown 正文才有可提取的标题层级 */}
+        {isMarkdown && <ArticleTree markdownText={post.text} />}
 
         {/* 上下篇（A8） */}
         <section className="post-near">
@@ -171,7 +186,7 @@ export default async function PostPage({
           postId={post.id}
           allowComment={!aggregate.commentOptions?.disableComment}
           initialItems={comments.items}
-          initialTotal={comments.pagination?.total ?? comments.items.length}
+          initialTotal={commentTotal}
           initialPage={comments.pagination?.page ?? 1}
           initialTotalPages={comments.pagination?.totalPages ?? 1}
         />

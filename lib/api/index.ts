@@ -1,15 +1,35 @@
 /**
- * API 客户端封装（v12.x，/api/v2，SDK 4.4.0）
+ * API 客户端封装（Core v12 / v3 双版本）
  *
  * SSR 侧统一走 fetch + 适配层，保证 UA 含 mx-space 绕过 SpiderGuard（R7）。
  * 客户端侧不直接调 core（避免暴露跨域与爬虫守卫问题），由 SSR 注水或 route handler 代理。
+ *
+ * 版本差异只在这一层和 adapter / envelope 里消化：
+ * - 前缀由 config.ts 决定，页面不参与；
+ * - 信封（v3 恒为 {data, meta?}）由 envelope.ts 拆；
+ * - 分页位置（v3 meta.pagination / v12 顶层 pagination）由 envelope.readPagination 统一；
+ * - 字段归一化交给 adapter.ts。
  *
  * 开发环境无 MX_CORE_URL 时走 mock（FRONTEND_PLAN S1 骨架阶段用假数据）。
  */
 
 import { headers } from 'next/headers'
 
-import { MX_CORE_URL, MX_SSR_UA, THEME_NAME, apiUrl, hasCore } from './config'
+import {
+  MX_API_VERSION,
+  MX_CORE_URL,
+  MX_SSR_UA,
+  THEME_NAME,
+  apiUrl,
+  hasCore,
+} from './config'
+import {
+  readErrorMessage,
+  readMeta,
+  readPagination,
+  unwrapEnvelope,
+  unwrapList,
+} from './envelope'
 import {
   adaptCategory,
   adaptComment,
@@ -26,7 +46,6 @@ import {
   camelKeys,
   nestCommentReplies,
   parsePagination,
-  unwrap,
   type Comment,
   type Category,
   type FriendLink,
@@ -79,7 +98,12 @@ async function get<T>(path: string): Promise<T> {
   if (!res.ok) {
     // 4xx 返回 null，由调用方走兜底而非抛 500
     if (res.status >= 400 && res.status < 500) return null as T
-    throw new Error(`API ${path} returned ${res.status}`)
+    // 5xx 必须抛出（不能伪装成 404 / 空列表），并保留 core 的错误信息
+    const body = await res.json().catch(() => null)
+    const detail = readErrorMessage(body)
+    throw new Error(
+      `API ${path} returned ${res.status}${detail ? ` (${detail})` : ''}`,
+    )
   }
   return res.json() as Promise<T>
 }
@@ -99,8 +123,11 @@ export interface AggregateData {
 
 export async function fetchAggregate(themeName = THEME_NAME): Promise<AggregateData> {
   if (!hasCore()) return mockAggregate
-  const raw = await get<Record<string, unknown>>(`/aggregate?theme=${themeName}`)
-  const a = camelKeys<Record<string, unknown>>(raw)
+  const raw = await get<unknown>(`/aggregate?theme=${themeName}`)
+  // v3 把聚合根包进 { data }；v12 原样返回
+  const a = camelKeys<Record<string, unknown>>(
+    unwrapEnvelope<Record<string, unknown>>(raw, MX_API_VERSION),
+  )
   return {
     user: a.user as AggregateData['user'],
     seo: a.seo as AggregateData['seo'],
@@ -112,13 +139,23 @@ export async function fetchAggregate(themeName = THEME_NAME): Promise<AggregateD
   }
 }
 
-/* ---------- Snippet 主题配置（S6：GET /snippets/theme/:name，公开） ---------- */
+/* ---------- Snippet 主题配置（S6） ---------- */
 
+/**
+ * 读取主题 Snippet。
+ *
+ * - v12：`GET /snippets/theme/:name` 是**公开**接口，直接返回内容；
+ * - v3 ：snippet 控制器所有路由都挂了 `@Auth()`，没有公开等价接口。
+ *        主题配置改由 `aggregate?theme=<name>` 的 `theme` 字段提供
+ *        （layout 本来就是「aggregate.theme 与 snippet 合并」，所以这里
+ *        直接返回 null，让上层只用 aggregate.theme，避免每次渲染都吃一个 401）。
+ */
 export async function fetchSnippet(
   refType: string,
   name: string,
 ): Promise<Record<string, unknown> | null> {
   if (!hasCore()) return null
+  if (MX_API_VERSION === 3) return null
   const raw = await get<Record<string, unknown>>(
     `/snippets/${refType}/${name}`,
   )
@@ -144,11 +181,9 @@ export async function fetchPosts(page = 1, size = 10): Promise<PostsListResult> 
   }
   // truncate：core 会把 text 截断到指定长度，列表只需要摘要，避免整篇正文（含 Lexical 树）过网
   const raw = await get<unknown>(`/posts?page=${page}&size=${size}&truncate=200`)
-  const items = unwrap<Record<string, unknown>[]>(raw).map(adaptPost)
-  const pagination = parsePagination(
-    (raw as Record<string, unknown>)?.pagination as Record<string, unknown>,
-  )
-  return { items, pagination }
+  if (!raw) return { items: [] }
+  const items = unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptPost)
+  return { items, pagination: readPagination(raw, MX_API_VERSION) }
 }
 
 export async function fetchPostDetail(
@@ -160,7 +195,11 @@ export async function fetchPostDetail(
   }
   const raw = await get<Record<string, unknown>>(`/posts/${category}/${slug}`)
   if (!raw) return null
-  return adaptPostDetail(raw)
+  // v3 的点赞态与相关文章在 meta 里（interaction.isLiked / related）
+  return adaptPostDetail(
+    unwrapEnvelope<Record<string, unknown>>(raw, MX_API_VERSION),
+    readMeta(raw),
+  )
 }
 
 /* ---------- 页面 ---------- */
@@ -180,11 +219,12 @@ export interface PageSummary {
 
 export async function fetchPages(): Promise<PageSummary[]> {
   if (!hasCore()) return [{ title: '关于', slug: 'about' }]
-  // select 让 core 跳过正文（列表只需要标题与 slug）
-  const raw = await get<unknown>('/pages?size=50&select=title,slug')
+  // select 让 core 跳过正文（列表只需要标题与 slug）。v3 的 /pages 只接受 page/size，
+  // 多传 select 会被 schema 忽略（若开了 forbidNonWhitelisted 则是 400），所以按版本区分。
+  const query = MX_API_VERSION === 3 ? 'size=50' : 'size=50&select=title,slug'
+  const raw = await get<unknown>(`/pages?${query}`)
   if (!raw) return []
-  const arr = unwrap<Record<string, unknown>[]>(raw)
-  if (!Array.isArray(arr)) return []
+  const arr = unwrapList<Record<string, unknown>>(raw, MX_API_VERSION)
   return arr
     .map((p) => ({
       title: String(p.title ?? ''),
@@ -199,7 +239,7 @@ export async function fetchPage(slug: string): Promise<PageDetail | null> {
   }
   const raw = await get<Record<string, unknown>>(`/pages/slug/${slug}`)
   if (!raw) return null
-  return adaptPage(raw)
+  return adaptPage(unwrapEnvelope<Record<string, unknown>>(raw, MX_API_VERSION))
 }
 
 /* ---------- 分类 / 标签 ---------- */
@@ -207,7 +247,7 @@ export async function fetchPage(slug: string): Promise<PageDetail | null> {
 export async function fetchCategories(): Promise<Category[]> {
   if (!hasCore()) return mockCategories
   const raw = await get<unknown>('/categories')
-  return unwrap<Record<string, unknown>[]>(raw).map(adaptCategory)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptCategory)
 }
 
 /** 标签聚合：GET /categories?type=tag → [{ name, count }] */
@@ -220,7 +260,7 @@ export async function fetchTags(): Promise<Tag[]> {
     }))
   }
   const raw = await get<unknown>('/categories?type=tag')
-  return unwrap<Record<string, unknown>[]>(raw).map(adaptTag)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptTag)
 }
 
 export interface CategoryDetail {
@@ -249,7 +289,7 @@ export async function fetchCategoryDetail(
     `/categories/${encodeURIComponent(slug)}`,
   )
   if (!raw) return null
-  const data = (raw.data ?? raw) as Record<string, unknown>
+  const data = unwrapEnvelope<Record<string, unknown>>(raw, MX_API_VERSION)
   const children = Array.isArray(data.children)
     ? (data.children as Record<string, unknown>[])
     : []
@@ -271,10 +311,10 @@ export async function fetchPostsByTag(tag: string): Promise<PostSummary[]> {
     `/categories/${encodeURIComponent(tag)}?tag=true`,
   )
   if (!raw) return []
-  const arr = Array.isArray(raw.data)
-    ? (raw.data as Record<string, unknown>[])
-    : []
-  return arr.map(adaptPost).filter((p) => p.isPublished !== false)
+  // v12: { data: Post[] }；v3: { data: { tag, data: Post[] } } —— unwrapList 两种都能拆
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION)
+    .map(adaptPost)
+    .filter((p) => p.isPublished !== false)
 }
 
 /* ---------- 评论 ---------- */
@@ -292,13 +332,14 @@ export async function fetchComments(
     `/comments/ref/${refId}?page=${page}&size=${size}`,
   )
   if (!raw) return { items: [] }
-  const unwrapped = unwrap<Record<string, unknown>[]>(raw)
-  const items = (Array.isArray(unwrapped) ? unwrapped : []).map(adaptComment)
-  const pagination = parsePagination(
-    (raw as Record<string, unknown>)?.pagination as Record<string, unknown>,
+  const items = unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(
+    adaptComment,
   )
   // core 的 replies 是扁平列表，按 parentCommentId 还原成树
-  return { items: nestCommentReplies(items), pagination }
+  return {
+    items: nestCommentReplies(items),
+    pagination: readPagination(raw, MX_API_VERSION),
+  }
 }
 
 /* ---------- 友链 ---------- */
@@ -306,7 +347,7 @@ export async function fetchComments(
 export async function fetchFriends(): Promise<FriendLink[]> {
   if (!hasCore()) return mockFriends
   const raw = await get<unknown>('/links/all')
-  return unwrap<Record<string, unknown>[]>(raw).map(adaptFriend)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptFriend)
 }
 
 /* ---------- 日记 Note（M3） ---------- */
@@ -348,7 +389,9 @@ export async function fetchNote(
 export async function fetchNotes(size = 10): Promise<Note[]> {
   if (!hasCore()) return [mockNote]
   const raw = await get<unknown>(`/notes?size=${size}`)
-  return unwrap<Record<string, unknown>[]>(raw).map(adaptNote)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map((n) =>
+    adaptNote(n),
+  )
 }
 
 /* ---------- 说说 Say（M4） ---------- */
@@ -356,7 +399,7 @@ export async function fetchNotes(size = 10): Promise<Note[]> {
 export async function fetchSays(size = 10): Promise<Say[]> {
   if (!hasCore()) return mockSays
   const raw = await get<unknown>(`/says?size=${size}`)
-  return unwrap<Record<string, unknown>[]>(raw).map(adaptSay)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptSay)
 }
 
 /* ---------- 项目 Projects ---------- */
@@ -365,7 +408,7 @@ export async function fetchSays(size = 10): Promise<Say[]> {
 export async function fetchProjects(size = 50): Promise<Project[]> {
   if (!hasCore()) return []
   const raw = await get<unknown>(`/projects?size=${size}`)
-  return unwrap<Record<string, unknown>[]>(raw).map(adaptProject)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptProject)
 }
 
 /* ---------- 动态 Recently（M4） ---------- */
@@ -373,7 +416,7 @@ export async function fetchProjects(size = 50): Promise<Project[]> {
 export async function fetchRecently(size = 10): Promise<Recently[]> {
   if (!hasCore()) return mockRecently
   const raw = await get<unknown>(`/recently?size=${size}`)
-  return unwrap<Record<string, unknown>[]>(raw).map(adaptRecently)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptRecently)
 }
 
 /* ---------- 时间轴 Timeline（M2/M5） ---------- */
@@ -419,7 +462,8 @@ export async function fetchTimeline(
   const qs = params.toString()
   const raw = await get<unknown>(`/aggregate/timeline${qs ? `?${qs}` : ''}`)
   if (!raw) return []
-  const data = (raw as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+  // v12: { data: { posts, notes } }；v3: { data: { posts, notes }, meta }
+  const data = unwrapEnvelope<Record<string, unknown>>(raw, MX_API_VERSION)
   const posts = (data?.posts as Record<string, unknown>[]) || []
   const notes = (data?.notes as Record<string, unknown>[]) || []
   return [
@@ -442,8 +486,8 @@ export async function fetchSearch(keyword: string): Promise<PostSummary[]> {
     )
   }
   const raw = await get<unknown>(`/search/post?keyword=${encodeURIComponent(keyword)}`)
-  const arr = unwrap<Record<string, unknown>[]>(raw)
-  return (Array.isArray(arr) ? arr : []).map((item) => {
+  const arr = unwrapList<Record<string, unknown>>(raw, MX_API_VERSION)
+  return arr.map((item) => {
     const post = adaptPost(item)
     // core 的 highlight.snippet 为 string | null（没有命中片段时是 null），
     // 只有非空字符串才覆盖摘要，否则保留 adaptPost 的兜底结果
@@ -510,8 +554,7 @@ export async function fetchRecentPosts(size = 6): Promise<PostSummary[]> {
     `/posts?size=${size}&sortBy=createdAt&sortOrder=desc&truncate=200`,
   )
   if (!raw) return []
-  const unwrapped = unwrap<Record<string, unknown>[]>(raw)
-  return (Array.isArray(unwrapped) ? unwrapped : []).map(adaptPost)
+  return unwrapList<Record<string, unknown>>(raw, MX_API_VERSION).map(adaptPost)
 }
 
 /** 热门文章：GET /aggregate/top 按阅读量排序，返回 { posts, notes } */
@@ -519,8 +562,10 @@ export async function fetchHotPosts(size = 6): Promise<PostSummary[]> {
   if (!hasCore()) return mockPosts.slice(0, size)
   const raw = await get<Record<string, unknown>>(`/aggregate/top?size=${size}`)
   if (!raw) return []
-  const posts = (raw.data ?? raw) as Record<string, unknown>
-  const arr = Array.isArray(posts.posts) ? (posts.posts as Record<string, unknown>[]) : []
+  const payload = unwrapEnvelope<Record<string, unknown>>(raw, MX_API_VERSION)
+  const arr = Array.isArray(payload?.posts)
+    ? (payload.posts as Record<string, unknown>[])
+    : []
   return arr.map(adaptPost)
 }
 
@@ -547,7 +592,7 @@ export async function fetchRecentComments(): Promise<RecentComment[]> {
   }
   const raw = await get<Record<string, unknown>>('/activity/recent')
   if (!raw) return []
-  const payload = (raw.data ?? raw) as Record<string, unknown>
+  const payload = unwrapEnvelope<Record<string, unknown>>(raw, MX_API_VERSION)
   const arr = Array.isArray(payload.comment)
     ? (payload.comment as Record<string, unknown>[])
     : []

@@ -119,3 +119,49 @@ test('页面动作：reason=ok 但 note 缺失时按故障处理，不渲染空�
 test('页面动作：password 时 note 为 null 也不会被当成 render', () => {
   assert.equal(resolveNotePageAction({ note: null, locked: true, reason: 'password' }), 'password')
 })
+
+/* ---------- v3：错误码是字符串枚举 ---------- */
+
+test('v3：403 + { error: { code: NOTE_FORBIDDEN } } → 需要密码', () => {
+  const result = classifyNoteResponse(403, {
+    error: { code: 'NOTE_FORBIDDEN', message: '不要偷看人家的小心思啦~' },
+  })
+  assert.equal(result.locked, true)
+  assert.equal(result.reason, 'password')
+  assert.equal(resolveNotePageAction(result), 'password')
+})
+
+test('v3：403 + 其他字符串错误码 → error，不显示密码框', () => {
+  for (const code of ['COMMENT_FORBIDDEN', 'NOTE_NOT_FOUND', 'UNAUTHORIZED']) {
+    const result = classifyNoteResponse(403, { error: { code, message: 'x' } })
+    assert.equal(result.locked, false)
+    assert.equal(result.reason, 'error', code)
+  }
+})
+
+test('v3：200 + { data, meta } 仍能取到日记本体', () => {
+  const result = classifyNoteResponse(200, {
+    data: { id: 'n3', nid: 9, text: 'v3', content: 'v3' },
+    meta: { interaction: { isLiked: true } },
+  })
+  assert.equal(result.reason, 'ok')
+  assert.equal(result.note?.nid, 9)
+})
+
+test('v3：点赞态从 meta.interaction 读出，not.body', async () => {
+  const { adaptNote } = await import('../lib/api/adapter.ts')
+  const note = adaptNote(
+    { id: 'n1', nid: 1, text: 'x', content: 'x' },
+    { interaction: { isLiked: true, likeCount: 4 } },
+  )
+  assert.equal(note.liked, true)
+  assert.equal(note.likeCount, 4)
+})
+
+test('v3：classifyNoteResponse 不会丢掉 meta 里的点赞态', () => {
+  const result = classifyNoteResponse(200, {
+    data: { id: 'n1', nid: 1, text: 'x', content: 'x' },
+    meta: { interaction: { isLiked: true } },
+  })
+  assert.equal(result.note?.liked, true)
+})

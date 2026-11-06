@@ -1,17 +1,24 @@
 import { adaptNote, type Note } from './adapter'
+import { readMeta } from './envelope'
 
 /**
  * 加密日记的访问判定。
  *
- * core v12.x 的密码错误/缺失都用 `BizException(ErrorCodeEnum.NoteForbidden)` 抛出，
- * 响应是 HTTP **403** + `{ ok: 0, code: 14000, message: '不要偷看人家的小心思啦~' }`。
+ * 两个版本的「密码缺失/错误」都是 HTTP **403**，但业务码形态不同：
  *
- * 这里把「403」+「业务码 14000」两个条件一起判定：
- * 只有同时满足才当作「需要密码」，WAF / 反向代理返回的 403 HTML、
- * 其他业务 403（如 CommentForbidden 14005）都归为普通错误，避免把故障
- * 混淆成密码页。
+ * | Core | 响应体 |
+ * |---|---|
+ * | v12（/api/v2） | `{ ok: 0, code: 14000, message: '不要偷看人家的小心思啦~' }` |
+ * | v3（/api/v3）  | `{ error: { code: 'NOTE_FORBIDDEN', message: … } }` |
+ *
+ * 所以判定条件是「403」+「业务码属于密码集合」，两者同时满足才算密码问题。
+ * WAF / 反向代理返回的 403 HTML、其他业务 403（如 CommentForbidden）
+ * 都归为普通错误，避免把故障混淆成密码页。
  */
 export const NOTE_FORBIDDEN_CODE = 14000
+
+/** v3 的 AppErrorCode 是字符串，密码相关错误码即这个 */
+export const NOTE_FORBIDDEN_CODES: readonly string[] = ['NOTE_FORBIDDEN']
 
 export type NoteAccessReason = 'ok' | 'password' | 'not-found' | 'error'
 
@@ -27,13 +34,31 @@ function readObject(body: unknown): Record<string, unknown> | null {
   return body as Record<string, unknown>
 }
 
-/** 从响应体里取业务错误码（顶层 code，兼容 { data: { code } } 形态） */
-function readErrorCode(body: unknown): number | null {
+/**
+ * 从响应体里取业务错误码。
+ *
+ * 兼容三种位置：v12 顶层 `{code}`、v12 包裹 `{data:{code}}`、
+ * v3 错误信封 `{error:{code}}`。返回值统一为字符串，便于同时比对
+ * 数字码（'14000'）和枚举名（'NOTE_FORBIDDEN'）。
+ */
+function readErrorCode(body: unknown): string | null {
   const root = readObject(body)
   if (!root) return null
-  const nested = readObject(root.data)
-  const code = Number(root.code ?? nested?.code)
-  return Number.isFinite(code) ? code : null
+  // v3 的 error 对象优先，其次才是 v12 的 { data: { code } }
+  const nested = readObject(root.error) ?? readObject(root.data)
+  const code = root.code ?? nested?.code
+  if (typeof code === 'number') return String(code)
+  if (typeof code === 'string' && code.length > 0) return code
+  return null
+}
+
+/** 403 是否属于「日记需要密码」 */
+export function isNotePasswordError(body: unknown): boolean {
+  const code = readErrorCode(body)
+  if (!code) return false
+  return (
+    code === String(NOTE_FORBIDDEN_CODE) || NOTE_FORBIDDEN_CODES.includes(code)
+  )
 }
 
 /** 拆 { data: {...} } 信封；对象原样返回 */
@@ -48,17 +73,22 @@ function unwrapNoteBody(body: unknown): Record<string, unknown> {
  * 把 core 的响应翻译成页面需要的状态。四种 reason 互斥，页面必须分别处理：
  *
  * - `ok`：正常渲染；
- * - `password`：展示密码表单（只有 403 + 14000 会走到这里）；
+ * - `password`：展示密码表单（只有 403 + 密码类业务码会走到这里）；
  * - `not-found`：真正的 404，调用 `notFound()`；
  * - `error`：基础设施故障（5xx / 429 / WAF 403 / 网络错误），必须报错或可重试，
  *   **不能降级成 404**——那会把 Core 宕机伪装成内容不存在。
  */
 export function classifyNoteResponse(status: number, body: unknown): NoteAccess {
   if (status >= 200 && status < 300) {
-    return { note: adaptNote(unwrapNoteBody(body)), locked: false, reason: 'ok' }
+    // v3 的点赞态/计数在信封的 meta 里，必须一起传进适配层
+    return {
+      note: adaptNote(unwrapNoteBody(body), readMeta(body)),
+      locked: false,
+      reason: 'ok',
+    }
   }
 
-  if (status === 403 && readErrorCode(body) === NOTE_FORBIDDEN_CODE) {
+  if (status === 403 && isNotePasswordError(body)) {
     return { note: null, locked: true, reason: 'password' }
   }
 

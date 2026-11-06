@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adaptComment, buildReplyTree } from '@/lib/api/adapter'
-import { MX_CORE_URL, apiUrl } from '@/lib/api/config'
+import { MX_API_VERSION, MX_CORE_URL, apiUrl } from '@/lib/api/config'
+import { unwrapEnvelope } from '@/lib/api/envelope'
 import { proxyHeaders } from '@/lib/api/proxy'
 
 /**
@@ -10,6 +11,9 @@ import { proxyHeaders } from '@/lib/api/proxy'
  * 中间的回复要通过 GET /comments/thread/:rootCommentId?cursor= 逐批取。
  *
  * GET /api/comments/thread?rootId=xxx&cursor=yyy
+ *
+ * 版本差异只在这里消化：v12 直接返回 { replies, remaining, done, nextCursor }，
+ * v3 把它包进 { data: {...} }。对浏览器始终输出同一份扁平结构。
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -40,7 +44,9 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const raw = (await res.json()) as Record<string, unknown>
+  const body = await res.json()
+  // v3 的响应恒为 { data, meta? }；v12 是裸对象
+  const raw = unwrapEnvelope<Record<string, unknown>>(body, MX_API_VERSION) ?? {}
   const replies = Array.isArray(raw.replies)
     ? (raw.replies as Record<string, unknown>[]).map(adaptComment)
     : []
