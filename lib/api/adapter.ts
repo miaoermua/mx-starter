@@ -312,34 +312,42 @@ export function nestCommentReplies(list: Comment[]): Comment[] {
 
 /**
  * 把扁平回复列表还原成树。`rootId` 是线程根评论 id（父级指向它的算顶层）。
+ *
+ * 数据可能不干净（父级缺失、自引用、a↔b 环状引用），这里在**建边时**就检测环并断开，
+ * 保证返回值一定是无环树：
+ * - 断掉的边不会让评论消失，该评论自己升为顶层；
+ * - 不能用「先建图再 DFS 去重」的写法，那样树里仍然留着回边，
+ *   递归渲染/拍平都会栈溢出。
  */
 export function buildReplyTree(flat: Comment[], rootId?: string): Comment[] {
   const byId = new Map(flat.map((c) => [c.id, { ...c, children: [] as Comment[] }]))
-  for (const c of byId.values()) {
-    const parent = c.parent ? byId.get(c.parent) : undefined
-    if (parent && parent.id !== c.id) parent.children!.push(c)
-  }
+  const attached = new Set<string>()
 
-  const topLevel = [...byId.values()].filter(
-    (c) => !c.parent || c.parent === rootId || !byId.has(c.parent),
-  )
+  for (const comment of byId.values()) {
+    if (!comment.parent) continue
+    const parent = byId.get(comment.parent)
+    // 父级是线程根 / 不在本页（被 replyWindow 截断）/ 自引用：留在顶层
+    if (!parent || parent.id === comment.id || comment.parent === rootId) continue
 
-  // 兜底：parent 指向成环时上面的过滤会让评论从树上消失，这里补成顶层
-  const reachable = new Set<string>()
-  const walk = (c: Comment) => {
-    if (reachable.has(c.id)) return
-    reachable.add(c.id)
-    ;(c.children ?? []).forEach(walk)
-  }
-  topLevel.forEach(walk)
-  for (const c of byId.values()) {
-    if (!reachable.has(c.id)) {
-      topLevel.push(c)
-      walk(c)
+    // 沿 parent 链上溯，能回到自己说明成环，断边
+    let cursor: Comment | undefined = parent
+    const visited = new Set<string>()
+    let cyclic = false
+    while (cursor && !visited.has(cursor.id)) {
+      if (cursor.id === comment.id) {
+        cyclic = true
+        break
+      }
+      visited.add(cursor.id)
+      cursor = cursor.parent ? byId.get(cursor.parent) : undefined
     }
+    if (cyclic) continue
+
+    parent.children!.push(comment)
+    attached.add(comment.id)
   }
 
-  return topLevel
+  return [...byId.values()].filter((comment) => !attached.has(comment.id))
 }
 
 /* ---------- 友链 ---------- */

@@ -5,9 +5,11 @@ import { proxyHeaders } from '@/lib/api/proxy'
 /**
  * 评论回复代理 route（C7）
  *
- * POST /api/comment/reply { id, ref, author, mail, url, text }
+ * POST /api/comment/reply { id, author, mail, url, text }
  * 转发到 core POST /comments/guest/reply/:id
- * id = 被回复的评论 ID，ref = 文章 ID（core 不读 body 里的 ref，这里不再转发）
+ *
+ * id = 被回复的评论 ID。core 的回复路由只读 path + body，既不需要文章 id
+ * 也不需要 ref（refType 从被回复评论上继承），所以 body 里的 ref 一并丢弃。
  */
 export async function POST(request: NextRequest) {
   const body = await request.json()

@@ -15,6 +15,10 @@ import { useState, useEffect } from 'react'
  *
  * 回复（C7）：replyTo 非空时走 POST /api/comment/reply { id: replyTo, ...payload }
  *          并显示取消回复链接
+ *
+ * 关于 ref：core 的 `ref` query 参数是**引用类型**（post/note/page/recently），
+ * 不是文章 id。不传时 core 用 `findGlobalById(id)` 自动判定，结果更可靠，
+ * 所以这里不发送 ref（传 id 会被当成非法枚举值）。
  */
 
 interface FormData {
@@ -81,8 +85,9 @@ export function CommentForm({
       // 回复走 /api/comment/reply，普通评论走 /api/comment（C7）
       const endpoint = replyTo ? '/api/comment/reply' : '/api/comment'
       // url 为空时不传，避免后端 422（core 要求 url 非空则必须合法）
+      // id：普通评论是文章 id，回复是被回复评论的 id；ref 由 core 自动判定，不发送
       const payload = replyTo
-        ? { author: data.author, mail: data.mail, text: data.text, url: data.url || undefined, id: replyTo, ref: postId }
+        ? { author: data.author, mail: data.mail, text: data.text, url: data.url || undefined, id: replyTo }
         : { author: data.author, mail: data.mail, text: data.text, url: data.url || undefined, id: postId }
       const res = await fetch(endpoint, {
         method: 'POST',

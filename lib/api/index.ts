@@ -41,25 +41,25 @@ import {
   type TimelineItem,
 } from './adapter'
 import { mockAggregate, mockPosts, mockPostDetail, mockPage, mockComments, mockFriends, mockCategories, mockNote, mockSays, mockRecently } from './mock'
+import { classifyNoteResponse, type NoteAccess } from './note-access'
+import { ipForwardHeaders } from './proxy'
 
 /**
  * SSR fetch 专用 headers。
  *
  * core 的 IP 判定直接读 `x-forwarded-for` / `x-real-ip`，SSR 请求如果不带访客 IP，
  * `liked`（详情页点赞态）、按 IP 去重的阅读数都会落到服务器 IP 上。
- * 反向代理（nginx/Vercel）会带 x-forwarded-for，这里原样透传。
+ *
+ * IP 的取值规则与 route handler 共用 `ipForwardHeaders`（按可信代理层数从链条右侧取），
+ * 不把浏览器可伪造的 `x-forwarded-for` 原样透传。
  */
-function ssrHeaders(): HeadersInit {
+function ssrHeaders(): Record<string, string> {
   const out: Record<string, string> = {
     'User-Agent': MX_SSR_UA,
     Accept: 'application/json',
   }
   try {
-    const h = headers()
-    const forwarded = h.get('x-forwarded-for')
-    const realIp = h.get('x-real-ip')
-    if (forwarded) out['x-forwarded-for'] = forwarded
-    if (realIp) out['x-real-ip'] = realIp
+    Object.assign(out, ipForwardHeaders(headers()))
   } catch {
     // 构建期（无请求上下文）取不到 headers，忽略即可
   }
@@ -312,31 +312,30 @@ export async function fetchFriends(): Promise<FriendLink[]> {
 /* ---------- 日记 Note（M3） ---------- */
 
 /** 日记详情；有密码的日记需要传 password，否则 core 返回 403 且正文被隐藏 */
-export interface NoteAccess {
-  note: Note | null
-  /** true = 日记存在但密码缺失/错误（core 返回 403），页面应展示密码表单而非 404 */
-  locked: boolean
-}
+export type { NoteAccess }
 
 export async function fetchNoteWithAccess(
   nid: string,
   password?: string,
 ): Promise<NoteAccess> {
   if (!hasCore()) {
-    return { note: mockNote, locked: false }
+    return { note: mockNote, locked: false, reason: 'ok' }
   }
   const qs = password ? `?password=${encodeURIComponent(password)}` : ''
-  // 这里需要区分 403（加密日记）与 404，不能复用 get() 的 null 兜底
-  const res = await fetch(apiUrl(`/notes/nid/${nid}${qs}`), {
-    headers: ssrHeaders(),
-    cache: 'no-store',
-  })
-  if (res.status === 403) return { note: null, locked: true }
-  if (!res.ok) return { note: null, locked: false }
-  const raw = (await res.json()) as Record<string, unknown>
-  // core v12.x 返回 { data: {...}, prev, next } 信封
-  const data = raw?.data ?? raw
-  return { note: adaptNote(data as Record<string, unknown>), locked: false }
+  // 这里需要区分 403（加密日记）、404 与基础设施故障，不能复用 get() 的 null 兜底。
+  // 403 还要再看业务码（14000）才算密码问题，see lib/api/note-access.ts
+  let res: Response
+  try {
+    res = await fetch(apiUrl(`/notes/nid/${nid}${qs}`), {
+      headers: ssrHeaders(),
+      cache: 'no-store',
+    })
+  } catch {
+    // 网络错误（DNS / 连接被拒 / 超时）不是「日记不存在」，归入 error
+    return { note: null, locked: false, reason: 'error' }
+  }
+  const body = await res.json().catch(() => null)
+  return classifyNoteResponse(res.status, body)
 }
 
 export async function fetchNote(
@@ -446,14 +445,12 @@ export async function fetchSearch(keyword: string): Promise<PostSummary[]> {
   const arr = unwrap<Record<string, unknown>[]>(raw)
   return (Array.isArray(arr) ? arr : []).map((item) => {
     const post = adaptPost(item)
-    // core 返回 { highlight: { keywords, snippet } }，摘要比正文截断更贴题
-    const highlight = (item as Record<string, unknown>).highlight as
-      | Record<string, unknown>
-      | undefined
-    const snippet = highlight?.snippet
-    return typeof snippet === 'string' && snippet
-      ? { ...post, summary: snippet }
-      : post
+    // core 的 highlight.snippet 为 string | null（没有命中片段时是 null），
+    // 只有非空字符串才覆盖摘要，否则保留 adaptPost 的兜底结果
+    const highlight = item.highlight as Record<string, unknown> | undefined
+    const snippet =
+      typeof highlight?.snippet === 'string' ? highlight.snippet.trim() : ''
+    return snippet ? { ...post, summary: snippet } : post
   })
 }
 

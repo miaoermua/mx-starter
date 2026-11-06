@@ -1,4 +1,5 @@
 import { fetchComments, fetchNoteWithAccess } from '@/lib/api'
+import { resolveNotePageAction } from '@/lib/api/note-access'
 import { getAggregate } from '@/lib/api/server'
 import { notFound } from 'next/navigation'
 import { renderMarkdown } from '@/lib/markdown'
@@ -21,31 +22,39 @@ export default async function NotePage({
   searchParams?: { password?: string }
 }) {
   const password = searchParams?.password
-  const { note, locked } = await fetchNoteWithAccess(params.nid, password)
-  if (!note) {
-    // 加密日记：core 返回 403，展示密码表单而不是 404
-    if (locked) {
-      return (
-        <main>
-          <div className="wrap min">
-            <section className="post-title">
-              <h2>日记已加密</h2>
-            </section>
-            <form className="post-password" method="get">
-              <input
-                type="password"
-                name="password"
-                placeholder="输入访问密码"
-                required
-              />
-              <button type="submit">查看</button>
-            </form>
-          </div>
-        </main>
-      )
-    }
-    notFound()
+  const access = await fetchNoteWithAccess(params.nid, password)
+  const action = resolveNotePageAction(access)
+
+  // 基础设施故障（core 5xx / 429 / 网络错误 / WAF 403）交给 error.tsx（HTTP 500 + 重试），
+  // 绝不降级成 404：那会让「Core 挂了」看起来像「这篇日记不存在」。
+  if (action === 'error') {
+    throw new Error('日记服务暂时不可用')
   }
+
+  // 只有 403 + 业务码 14000（NoteForbidden）才算密码错误
+  if (action === 'password') {
+    return (
+      <main>
+        <div className="wrap min">
+          <section className="post-title">
+            <h2>日记已加密</h2>
+          </section>
+          <form className="post-password" method="get">
+            <input
+              type="password"
+              name="password"
+              placeholder="输入访问密码"
+              required
+            />
+            <button type="submit">查看</button>
+          </form>
+        </div>
+      </main>
+    )
+  }
+
+  if (!access.note) notFound()
+  const note = access.note
 
   const [comments, aggregate] = await Promise.all([
     fetchComments(note.id, 1, 10),

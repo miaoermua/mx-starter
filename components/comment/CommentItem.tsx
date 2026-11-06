@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Comment } from '@/lib/api'
-import { buildReplyTree } from '@/lib/api/adapter'
+import { mergeThreadPage } from '@/lib/api/comment-thread'
 import { CommentContent } from './CommentContent'
 
 /**
@@ -51,9 +51,6 @@ export function CommentItem({
     )
   }
 
-  const flatten = (list: Comment[]): Comment[] =>
-    list.flatMap((c) => [c, ...flatten(c.children ?? [])])
-
   const expandThread = async () => {
     if (!replyWindow?.hasHidden || expanding) return
     setExpanding(true)
@@ -63,17 +60,19 @@ export function CommentItem({
       const res = await fetch(`/api/comments/thread?${qs}`)
       if (!res.ok) return
       const data = await res.json()
-      const added: Comment[] = Array.isArray(data.items) ? data.items : []
-      // 服务端返回的也是一棵树，先拍平再和新数据一起重建
-      setChildren((prev) =>
-        buildReplyTree([...flatten(prev), ...flatten(added)], comment.id),
-      )
-      setReplyWindow({
-        ...replyWindow,
-        hasHidden: !data.done,
-        hiddenCount: Number(data.remaining ?? 0),
-        nextCursor: data.nextCursor ?? undefined,
+      const merged = mergeThreadPage({
+        children,
+        rootId: comment.id,
+        page: {
+          items: Array.isArray(data.items) ? data.items : [],
+          nextCursor: data.nextCursor ?? null,
+          remaining: data.remaining ?? 0,
+          done: data.done === true,
+        },
+        window: replyWindow,
       })
+      setChildren(merged.children)
+      setReplyWindow(merged.window ?? replyWindow)
     } catch {
       // 静默失败
     } finally {
