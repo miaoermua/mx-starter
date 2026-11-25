@@ -31,8 +31,7 @@ export function Lightbox() {
 
   // 绑定正文图片点击
   useEffect(() => {
-    const selector =
-      '.post-content:not(.is-special) img, .page-content:not(.is-special) img'
+    const selector = '.post-content:not(.is-special) img, .page-content:not(.is-special) img'
     const imgs = Array.from(document.querySelectorAll<HTMLImageElement>(selector))
 
     imgs.forEach((img, i) => {
@@ -72,12 +71,7 @@ export function Lightbox() {
           showAt(state.current - 1)
         }}
       />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt=""
-        onLoad={() => setState((s) => ({ ...s, loading: false }))}
-      />
+      <img src={src} alt="" onLoad={() => setState((s) => ({ ...s, loading: false }))} />
       <div
         className={`ks-next ${state.current === state.images.length - 1 ? 'ended' : ''}`}
         onClick={(e) => {

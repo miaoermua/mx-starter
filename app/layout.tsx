@@ -14,8 +14,9 @@ import { mergeThemeConfig, type ThemeConfig } from '@/lib/theme-config'
  * 从 cookie 读取明暗偏好，SSR 直接输出 body.dark，避免首屏闪白。
  * 无 cookie 时按亮色渲染，客户端点击再切换。
  */
-function readThemeCookie(): boolean {
-  const h = headers()
+async function readThemeCookie(): Promise<boolean> {
+  // Next 15 起 headers() 返回 Promise
+  const h = await headers()
   const cookie = h.get('cookie') || ''
   const m = /(?:^|;\s*)theme=(\w+)/.exec(cookie)
   if (!m) return false
@@ -40,21 +41,18 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const isDark = readThemeCookie()
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const isDark = await readThemeCookie()
   const bodyClass = isDark ? 'dark' : undefined
 
   const agg = await getAggregate()
   // 主题配置：Snippet（reference=theme, name=THEME_NAME）与 aggregate.theme 合并
   const snippet = await fetchSnippet('theme', THEME_NAME)
   const themeFromAggregate = agg.theme as Partial<ThemeConfig> | undefined
-  const mergedRaw = themeFromAggregate && snippet
-    ? { ...themeFromAggregate, ...snippet }
-    : themeFromAggregate || (snippet as Partial<ThemeConfig> | undefined)
+  const mergedRaw =
+    themeFromAggregate && snippet
+      ? { ...themeFromAggregate, ...snippet }
+      : themeFromAggregate || (snippet as Partial<ThemeConfig> | undefined)
   const theme = mergeThemeConfig(mergedRaw)
   // 顶栏「站点」下拉菜单用（与 Footer 的 fetchPages 在同一渲染周期内自动去重）
   const pages = await fetchPages()
@@ -64,12 +62,14 @@ export default async function RootLayout({
       <head>
         {/* 背景图：SSR 只输出 URL，不发起图片请求 */}
         {theme.background && (
-          <style dangerouslySetInnerHTML={{ __html: `body:before{content:'';background-image:url(${theme.background})}` }} />
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `body:before{content:'';background-image:url(${theme.background})}`,
+            }}
+          />
         )}
         {/* custom_css：注入在自带样式之后 */}
-        {theme.custom_css && (
-          <style dangerouslySetInnerHTML={{ __html: theme.custom_css }} />
-        )}
+        {theme.custom_css && <style dangerouslySetInnerHTML={{ __html: theme.custom_css }} />}
       </head>
       <body className={bodyClass}>
         <Header aggregate={agg} pages={pages} />

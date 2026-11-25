@@ -8,7 +8,7 @@
 
 /* 失联/禁止友链：纯文字+删除线，不可点击 */
 .link-friend.is-offline {
-  opacity: .6;
+  opacity: 0.6;
   cursor: default;
   pointer-events: none;
 }

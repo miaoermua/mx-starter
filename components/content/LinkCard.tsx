@@ -46,24 +46,14 @@ function fallbackTitle(source: LinkCardSource, id: string, url?: string): string
   return id
 }
 
-export const LinkCard: FC<LinkCardProps> = ({
-  id,
-  source,
-  className,
-  url,
-  data,
-}) => {
+export const LinkCard: FC<LinkCardProps> = ({ id, source, className, url, data }) => {
   const href = data?.href ?? fallbackHref(source, id, url)
   const title = data?.title ?? fallbackTitle(source, id, url)
   const desc = data?.desc ?? (source === 'external' ? url || id : undefined)
   const image = data?.image
   const external = source !== 'self'
 
-  const classNames = [
-    'link-card',
-    data ? 'link-card-resolved' : 'link-card-fallback',
-    className,
-  ]
+  const classNames = ['link-card', data ? 'link-card-resolved' : 'link-card-fallback', className]
     .filter(Boolean)
     .join(' ')
 
@@ -78,12 +68,7 @@ export const LinkCard: FC<LinkCardProps> = ({
         <div className="link-card-title">{title}</div>
         {desc && <div className="link-card-desc">{desc}</div>}
       </div>
-      {image && (
-        <div
-          className="link-card-image"
-          style={{ backgroundImage: `url(${image})` }}
-        />
-      )}
+      {image && <div className="link-card-image" style={{ backgroundImage: `url(${image})` }} />}
     </a>
   )
 }

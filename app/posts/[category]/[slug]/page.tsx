@@ -25,28 +25,22 @@ import { CommentSection } from '@/components/comment/CommentSection'
 export default async function PostPage({
   params,
 }: {
-  params: { category: string; slug: string }
+  params: Promise<{ category: string; slug: string }>
 }) {
-  const post = await fetchPostDetail(params.category, params.slug)
+  // Next 15 起 params 是 Promise，同步访问会在运行时降级为警告，16 起直接报错
+  const { category, slug } = await params
+  const post = await fetchPostDetail(category, slug)
   if (!post) notFound()
 
   // 链接卡片（脚手架自带：kami 扩展移植）：脚注解析 + SSR 并发预取，失败降级为朴素链接卡
   const { segments, cards } = renderMarkdownSegments(post.text)
   const cardData = cards.length > 0 ? await resolveLinkCards(cards) : new Map<string, null>()
   const modified = post.modified ? new Date(post.modified) : null
-  const showStaleWarning =
-    modified && Date.now() - modified.getTime() >= 15552000000
+  const showStaleWarning = modified && Date.now() - modified.getTime() >= 15552000000
 
-  const { prev, next } = await fetchAdjacentPosts(
-    post.id,
-    post.created,
-    post.categorySlug,
-  )
+  const { prev, next } = await fetchAdjacentPosts(post.id, post.created, post.categorySlug)
 
-  const [comments, aggregate] = await Promise.all([
-    fetchComments(post.id, 1, 10),
-    getAggregate(),
-  ])
+  const [comments, aggregate] = await Promise.all([fetchComments(post.id, 1, 10), getAggregate()])
   const commentTotal = comments.pagination?.total ?? comments.items.length
 
   return (
@@ -55,12 +49,8 @@ export default async function PostPage({
         <section className="post-title">
           <h2>{post.title}</h2>
           <div className="post-meta">
-            <time className="date">
-              {new Date(post.created).toLocaleDateString('zh-CN')}
-            </time>
-            {post.category && (
-              <span className="category">{post.category}</span>
-            )}
+            <time className="date">{new Date(post.created).toLocaleDateString('zh-CN')}</time>
+            {post.category && <span className="category">{post.category}</span>}
             {/* 阅读量 */}
             {typeof post.count?.read === 'number' && (
               <span className="view">{post.count.read}</span>
@@ -77,24 +67,24 @@ export default async function PostPage({
               天前，可能其部分内容已经发生变化，如有疑问可询问作者。
             </blockquote>
           )}
-        {/* 正文：分段渲染。无卡片脚注时等价原单段 HTML；卡片为 kami 扩展能力（脚手架自带：kami 扩展移植） */}
-        {segments.map((seg, i) => {
-          if (seg.type === 'html') {
-            return <div key={i} dangerouslySetInnerHTML={{ __html: seg.html }} />
-          }
-          const card = cards.find((c) => c.ref === seg.ref)
-          if (!card) return null
-          return (
-            <LinkCard
-              key={`card-${seg.ref}`}
-              id={card.id}
-              source={card.source}
-              url={card.url}
-              data={cardData.get(seg.ref) ?? null}
-            />
-          )
-        })}
-      </article>
+          {/* 正文：分段渲染。无卡片脚注时等价原单段 HTML；卡片为 kami 扩展能力（脚手架自带：kami 扩展移植） */}
+          {segments.map((seg, i) => {
+            if (seg.type === 'html') {
+              return <div key={i} dangerouslySetInnerHTML={{ __html: seg.html }} />
+            }
+            const card = cards.find((c) => c.ref === seg.ref)
+            if (!card) return null
+            return (
+              <LinkCard
+                key={`card-${seg.ref}`}
+                id={card.id}
+                source={card.source}
+                url={card.url}
+                data={cardData.get(seg.ref) ?? null}
+              />
+            )
+          })}
+        </article>
 
         {/* 目录树 */}
         <ArticleTree markdownText={post.text} />
@@ -105,9 +95,7 @@ export default async function PostPage({
             <li>
               上一篇:{' '}
               {prev ? (
-                <Link
-                  href={`/posts/${prev.categorySlug || 'uncategorized'}/${prev.slug}`}
-                >
+                <Link href={`/posts/${prev.categorySlug || 'uncategorized'}/${prev.slug}`}>
                   {prev.title}
                 </Link>
               ) : (
@@ -117,9 +105,7 @@ export default async function PostPage({
             <li>
               下一篇:{' '}
               {next ? (
-                <Link
-                  href={`/posts/${next.categorySlug || 'uncategorized'}/${next.slug}`}
-                >
+                <Link href={`/posts/${next.categorySlug || 'uncategorized'}/${next.slug}`}>
                   {next.title}
                 </Link>
               ) : (
@@ -145,9 +131,7 @@ export default async function PostPage({
             <ul>
               {post.related.map((item) => (
                 <li key={item.id}>
-                  <Link
-                    href={`/posts/${item.categorySlug || 'uncategorized'}/${item.slug}`}
-                  >
+                  <Link href={`/posts/${item.categorySlug || 'uncategorized'}/${item.slug}`}>
                     {item.title}
                   </Link>
                 </li>
@@ -184,9 +168,10 @@ export default async function PostPage({
 export async function generateMetadata({
   params,
 }: {
-  params: { category: string; slug: string }
+  params: Promise<{ category: string; slug: string }>
 }): Promise<Metadata> {
-  const post = await fetchPostDetail(params.category, params.slug)
+  const { category, slug } = await params
+  const post = await fetchPostDetail(category, slug)
   if (!post) return {}
 
   const ogImage = post.cover || post.images?.[0]

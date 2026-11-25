@@ -4,7 +4,7 @@
 
 ## 定位
 
-Mix Space **通用主题脚手架**：core v12.x（API v2，SDK 4.4.0）+ Next.js 14 App Router。
+Mix Space **通用主题脚手架**：core v12.x（API v2，SDK 4.4.0）+ Next.js 16 App Router（React 19）。
 目标是覆盖 mx 全部访客侧特性的通用模板——仓库不附带任何主题 CSS，价值在数据层与页面骨架。
 许可证 GPL-3.0。
 
@@ -20,13 +20,25 @@ Mix Space **通用主题脚手架**：core v12.x（API v2，SDK 4.4.0）+ Next.j
 
 ## 环境变量
 
-见 `.env.example`：`MX_CORE_URL`（空 = mock）、`MX_API_PREFIX`（固定 /api/v2）、`MX_SSR_UA`（必须含 mx-space，否则被 SpiderGuard 拦）、`MX_THEME_NAME`（对应后台 Snippet name）。
+见 `.env.example`：`MX_CORE_URL`（空 = mock）、`MX_API_PREFIX`（固定 /api/v2）、`MX_SSR_UA`（必须含 mx-space，否则被 SpiderGuard 拦）、`MX_THEME_NAME`（对应后台 Snippet name）、`MX_TRUSTED_PROXY_HOPS`（XFF 链路层数）、`DEV_ORIGINS`（开发时额外可信 dev origin，手机真机预览用）。
+
+## 运行时与工具链
+
+- Node.js >= 22.12、pnpm 10（`packageManager` 字段已锁定），lock 文件入库。
+- Next 16 / React 19：路由的 `params` 与 `searchParams` 是 **Promise**，必须 `await`；`headers()` / `cookies()` 同理。新加动态路由不要写成同步解构。
+- TypeScript 6：`baseUrl` 已废弃，路径别名只靠 `paths`（相对 tsconfig 解析）。
+- ESLint 用扁平配置 `eslint.config.mjs`（`eslint-config-next` 16 直接导出数组）；`next lint` 已移除，脚本是 `eslint .`。
+- Prettier 只做格式，不含 Tailwind 插件（本仓库不引入 CSS 框架）。
+- `.github/dependabot.yml` 每周检查 npm 与 GitHub Actions 更新，依赖升级走 PR 评审。
 
 ## 命令
 
-- `npm run dev` 开发（mock 模式零依赖）
-- `npm run typecheck` 提交前必须全绿
-- `npm run lint` / `npm run build`
+- `pnpm dev` 开发（mock 模式零依赖）
+- `pnpm typecheck` 提交前必须全绿
+- `pnpm lint` / `pnpm build`
+- `pnpm test`（node --test，不额外引入测试框架）
+- `pnpm format` / `pnpm format:check`
+- `pnpm verify` typecheck → lint → test → build 全跑
 
 ## 版本与分支
 
@@ -51,3 +63,4 @@ Mix Space **通用主题脚手架**：core v12.x（API v2，SDK 4.4.0）+ Next.j
 - 不要执行 `git commit` / `git push`，改动只落工作区，由用户自行提交。
 - 不要把 `docs/` 级别的长篇设计文档搬进仓库；设计讨论放 issue 或用户自己的笔记。
 - 新增依赖需要明确理由（脚手架刻意保持 6 个运行时依赖的瘦身材）。
+- 本仓库只承担脚手架职责：CSS 框架、i18n 框架、测试框架、主题专属配置都不进这里。`design`（Folio）那类完整主题的实现不能整包复制过来。

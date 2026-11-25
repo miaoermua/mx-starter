@@ -46,9 +46,7 @@ export function CommentItem({
 
   const onReply = (e: React.MouseEvent) => {
     e.preventDefault()
-    document.dispatchEvent(
-      new CustomEvent('mx:reply', { detail: { id: comment.id } }),
-    )
+    document.dispatchEvent(new CustomEvent('mx:reply', { detail: { id: comment.id } }))
   }
 
   const expandThread = async () => {
@@ -81,12 +79,8 @@ export function CommentItem({
   }
 
   return (
-    <div
-      className={`comment-item${parent ? ' comment-child' : ''}`}
-      id={`comment-${comment.id}`}
-    >
+    <div className={`comment-item${parent ? ' comment-child' : ''}`} id={`comment-${comment.id}`}>
       {comment.avatar && (
-        // eslint-disable-next-line @next/next/no-img-element
         <img className="avatar" src={comment.avatar} alt={comment.author} loading="lazy" />
       )}
       <div className="comment-meta">
@@ -107,9 +101,7 @@ export function CommentItem({
         </span>
       </div>
       <p className="comment-content">
-        {parent && (
-          <a href={`#comment-${parent.id}`}>@{parent.author} </a>
-        )}
+        {parent && <a href={`#comment-${parent.id}`}>@{parent.author} </a>}
         <CommentContent text={comment.content} />
       </p>
 

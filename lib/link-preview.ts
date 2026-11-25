@@ -52,11 +52,7 @@ const decodeHtmlEntities = (value: string) =>
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-const parseMetaContent = (
-  html: string,
-  attrName: 'property' | 'name',
-  attrValue: string,
-) => {
+const parseMetaContent = (html: string, attrName: 'property' | 'name', attrValue: string) => {
   const pattern = new RegExp(
     `<meta[^>]*${attrName}=["']${escapeRegex(attrValue)}["'][^>]*content=["']([^"']+)["'][^>]*>`,
     'i',
@@ -127,9 +123,7 @@ const isBlockedTarget = (url: URL) => {
  * 抓取外链 metadata（og:title / og:description / og:image）。
  * 失败抛 LinkPreviewError，由调用方降级处理。
  */
-export async function fetchLinkMetadata(
-  queryValue: string,
-): Promise<LinkPreviewResult> {
+export async function fetchLinkMetadata(queryValue: string): Promise<LinkPreviewResult> {
   let targetUrl: URL
   try {
     targetUrl = new URL(queryValue)
@@ -150,16 +144,12 @@ export async function fetchLinkMetadata(
       redirect: 'follow',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: {
-        'user-agent':
-          'Mozilla/5.0 (compatible; MxStarterLinkPreviewBot/1.0)',
+        'user-agent': 'Mozilla/5.0 (compatible; MxStarterLinkPreviewBot/1.0)',
       },
     })
 
     if (!response.ok) {
-      throw new LinkPreviewError(
-        `Upstream status ${response.status}`,
-        502,
-      )
+      throw new LinkPreviewError(`Upstream status ${response.status}`, 502)
     }
 
     const finalUrl = new URL(response.url || targetUrl.toString())
@@ -184,9 +174,7 @@ export async function fetchLinkMetadata(
 
     return {
       title: decodeHtmlEntities(title),
-      description: description
-        ? decodeHtmlEntities(stripTags(description))
-        : undefined,
+      description: description ? decodeHtmlEntities(stripTags(description)) : undefined,
       image,
       url: finalUrl.toString(),
     }

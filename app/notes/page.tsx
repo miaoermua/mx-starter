@@ -20,9 +20,7 @@ export default async function NotesListPage() {
           {notes.map((n) => (
             <div className="post-item" key={n.id}>
               <h2>
-                <Link href={`/notes/${n.nid}`}>
-                  {n.title || `日记 #${n.nid}`}
-                </Link>
+                <Link href={`/notes/${n.nid}`}>{n.title || `日记 #${n.nid}`}</Link>
               </h2>
               <p>
                 {(n.content || '')
@@ -37,13 +35,9 @@ export default async function NotesListPage() {
                   .slice(0, 100)}
               </p>
               <div className="post-meta">
-                <time className="date">
-                  {new Date(n.created).toLocaleDateString('zh-CN')}
-                </time>
+                <time className="date">{new Date(n.created).toLocaleDateString('zh-CN')}</time>
                 {n.mood && <span className="category">心情：{n.mood}</span>}
-                {n.weather && (
-                  <span className="category">天气：{n.weather}</span>
-                )}
+                {n.weather && <span className="category">天气：{n.weather}</span>}
               </div>
             </div>
           ))}

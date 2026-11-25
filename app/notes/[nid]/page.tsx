@@ -18,11 +18,11 @@ export default async function NotePage({
   params,
   searchParams,
 }: {
-  params: { nid: string }
-  searchParams?: { password?: string }
+  params: Promise<{ nid: string }>
+  searchParams: Promise<{ password?: string }>
 }) {
-  const password = searchParams?.password
-  const access = await fetchNoteWithAccess(params.nid, password)
+  const [{ nid }, { password }] = await Promise.all([params, searchParams])
+  const access = await fetchNoteWithAccess(nid, password)
   const action = resolveNotePageAction(access)
 
   // 基础设施故障（core 5xx / 429 / 网络错误 / WAF 403）交给 error.tsx（HTTP 500 + 重试），
@@ -40,12 +40,7 @@ export default async function NotePage({
             <h2>日记已加密</h2>
           </section>
           <form className="post-password" method="get">
-            <input
-              type="password"
-              name="password"
-              placeholder="输入访问密码"
-              required
-            />
+            <input type="password" name="password" placeholder="输入访问密码" required />
             <button type="submit">查看</button>
           </form>
         </div>
@@ -56,10 +51,7 @@ export default async function NotePage({
   if (!access.note) notFound()
   const note = access.note
 
-  const [comments, aggregate] = await Promise.all([
-    fetchComments(note.id, 1, 10),
-    getAggregate(),
-  ])
+  const [comments, aggregate] = await Promise.all([fetchComments(note.id, 1, 10), getAggregate()])
   const commentTotal = comments.pagination?.total ?? comments.items.length
   const html = renderMarkdown(note.content)
 
@@ -69,16 +61,10 @@ export default async function NotePage({
         <section className="post-title">
           <h2>{note.title || `日记 #${note.nid}`}</h2>
           <div className="post-meta">
-            <time className="date">
-              {new Date(note.created).toLocaleDateString('zh-CN')}
-            </time>
+            <time className="date">{new Date(note.created).toLocaleDateString('zh-CN')}</time>
             {note.mood && <span className="category">心情：{note.mood}</span>}
-            {note.weather && (
-              <span className="category">天气：{note.weather}</span>
-            )}
-            {typeof note.readCount === 'number' && (
-              <span className="view">{note.readCount}</span>
-            )}
+            {note.weather && <span className="category">天气：{note.weather}</span>}
+            {typeof note.readCount === 'number' && <span className="view">{note.readCount}</span>}
             <span className="comments">{commentTotal}</span>
           </div>
         </section>

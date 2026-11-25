@@ -19,9 +19,7 @@ export default async function SaysPage() {
             <div className="post-item" key={s.id}>
               <p>{s.content}</p>
               <div className="post-meta">
-                <time className="date">
-                  {new Date(s.created).toLocaleDateString('zh-CN')}
-                </time>
+                <time className="date">{new Date(s.created).toLocaleDateString('zh-CN')}</time>
               </div>
             </div>
           ))}

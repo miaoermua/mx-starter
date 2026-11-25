@@ -86,9 +86,7 @@ export function ThemeRuntime() {
 
   // 6. 评论 @ 引用高亮：hover .comment-item.active
   useEffect(() => {
-    const links = document.querySelectorAll<HTMLElement>(
-      '.comment-content [href^="#comment"]',
-    )
+    const links = document.querySelectorAll<HTMLElement>('.comment-content [href^="#comment"]')
     if (!links.length) return
 
     const handlers: Array<{ el: HTMLElement; enter: () => void; leave: () => void }> = []

@@ -8,17 +8,15 @@ import { fetchCategoryDetail } from '@/lib/api'
  * 数据来自 core GET /categories/:slug（返回该分类下全部文章），
  * 与首页共用 section.home-title + section.home-posts 的 DOM 契约。
  */
-export async function generateMetadata({ params }: { params: { slug: string } }) {
-  const detail = await fetchCategoryDetail(decodeURIComponent(params.slug))
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const detail = await fetchCategoryDetail(decodeURIComponent(slug))
   return { title: detail ? `${detail.category.name} · 分类` : '分类' }
 }
 
-export default async function CategoryPage({
-  params,
-}: {
-  params: { slug: string }
-}) {
-  const detail = await fetchCategoryDetail(decodeURIComponent(params.slug))
+export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const detail = await fetchCategoryDetail(decodeURIComponent(slug))
   if (!detail) notFound()
 
   const { category, posts } = detail
@@ -37,9 +35,7 @@ export default async function CategoryPage({
             {posts.map((post) => (
               <div className="post-item" key={post.id}>
                 <h2>
-                  <Link
-                    href={`/posts/${post.categorySlug || category.slug}/${post.slug}`}
-                  >
+                  <Link href={`/posts/${post.categorySlug || category.slug}/${post.slug}`}>
                     {post.title}
                   </Link>
                 </h2>

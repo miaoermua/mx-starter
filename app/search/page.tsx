@@ -10,9 +10,10 @@ import { fetchSearch } from '@/lib/api'
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: { s?: string }
+  searchParams: Promise<{ s?: string }>
 }) {
-  const keyword = searchParams.s || ''
+  const { s } = await searchParams
+  const keyword = s || ''
   const items = await fetchSearch(keyword)
 
   return (
@@ -26,9 +27,7 @@ export default async function SearchPage({
             {items.map((post) => (
               <div className="post-item" key={post.id}>
                 <h2>
-                  <Link
-                    href={`/posts/${post.categorySlug || 'uncategorized'}/${post.slug}`}
-                  >
+                  <Link href={`/posts/${post.categorySlug || 'uncategorized'}/${post.slug}`}>
                     {post.title}
                   </Link>
                 </h2>

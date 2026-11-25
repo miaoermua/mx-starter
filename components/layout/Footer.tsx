@@ -74,13 +74,9 @@ export async function Footer({ aggregate }: { aggregate: AggregateData }) {
         </section>
         <section className="sub-footer">
           <p>
-            © {new Date().getFullYear()}{' '}
-            <Link href={siteUrl}>{siteName}</Link>. All Rights Reserved. Theme By{' '}
-            <a
-              href="https://github.com/miaoermua/mx-starter"
-              target="_blank"
-              rel="nofollow"
-            >
+            © {new Date().getFullYear()} <Link href={siteUrl}>{siteName}</Link>. All Rights
+            Reserved. Theme By{' '}
+            <a href="https://github.com/miaoermua/mx-starter" target="_blank" rel="nofollow">
               mx-starter
             </a>
             .

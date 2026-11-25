@@ -22,8 +22,6 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
 }
 
 /** 把 Snippet / aggregate 读到的配置与默认值合并 */
-export function mergeThemeConfig(
-  partial?: Partial<ThemeConfig>,
-): ThemeConfig {
+export function mergeThemeConfig(partial?: Partial<ThemeConfig>): ThemeConfig {
   return { ...DEFAULT_THEME_CONFIG, ...partial }
 }

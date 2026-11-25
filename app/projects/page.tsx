@@ -25,7 +25,6 @@ export default async function ProjectsPage() {
                   <div className="project-item" key={project.id}>
                     {project.avatar && (
                       // 头像由 core 直接给出 URL，主题作者决定尺寸
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         className="project-avatar"
                         src={project.avatar}

@@ -19,9 +19,7 @@ export default async function RecentlyPage() {
             <div className="post-item" key={r.id}>
               <p>{r.content}</p>
               <div className="post-meta">
-                <time className="date">
-                  {new Date(r.created).toLocaleDateString('zh-CN')}
-                </time>
+                <time className="date">{new Date(r.created).toLocaleDateString('zh-CN')}</time>
               </div>
             </div>
           ))}

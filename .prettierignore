@@ -1,0 +1,13 @@
+# 构建产物与生成文件不参与格式化
+.next/
+out/
+build/
+node_modules/
+coverage/
+pnpm-lock.yaml
+package-lock.json
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# 第三方运行时脚本，原样分发
+public/vendor/

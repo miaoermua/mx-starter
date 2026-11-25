@@ -15,10 +15,11 @@ import { getAggregate } from '@/lib/api/server'
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: { page?: string }
+  searchParams: Promise<{ page?: string }>
 }) {
   const agg = await getAggregate()
-  const page = Math.max(1, Number(searchParams.page || '1'))
+  const { page: pageParam } = await searchParams
+  const page = Math.max(1, Number(pageParam || '1'))
   const { items: posts, pagination } = await fetchPosts(page, 10)
 
   const siteName = agg.seo?.title || agg.user?.name || 'mx-starter'
@@ -55,26 +56,18 @@ export default async function HomePage({
               <h2>
                 {/* core 列表默认把置顶文章排在前面，pinAt 供主题打「置顶」角标 */}
                 {post.pinAt && <span className="pin">置顶 </span>}
-                <Link
-                  href={`/posts/${post.categorySlug || 'uncategorized'}/${post.slug}`}
-                >
+                <Link href={`/posts/${post.categorySlug || 'uncategorized'}/${post.slug}`}>
                   {post.title}
                 </Link>
               </h2>
               <p>{post.summary}</p>
               <div className="post-meta">
-                <time className="date">
-                  {new Date(post.created).toLocaleDateString('zh-CN')}
-                </time>
-                {post.category && (
-                  <span className="category">{post.category}</span>
-                )}
+                <time className="date">{new Date(post.created).toLocaleDateString('zh-CN')}</time>
+                {post.category && <span className="category">{post.category}</span>}
                 {post.tags && post.tags.length > 0 && (
                   <span className="tags">{post.tags.join('，')}</span>
                 )}
-                <span className="comments">
-                  {post.count?.read ?? 0} °C
-                </span>
+                <span className="comments">{post.count?.read ?? 0} °C</span>
               </div>
             </div>
           ))}
@@ -84,9 +77,7 @@ export default async function HomePage({
           <section className="page-navigator">
             {currentPage > 1 && (
               <span>
-                <Link href={currentPage === 2 ? '/' : `/?page=${currentPage - 1}`}>
-                  «
-                </Link>
+                <Link href={currentPage === 2 ? '/' : `/?page=${currentPage - 1}`}>«</Link>
               </span>
             )}
             {pageNumbers.map((n, i) =>

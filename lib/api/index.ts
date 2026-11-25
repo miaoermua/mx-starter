@@ -40,7 +40,18 @@ import {
   type Tag,
   type TimelineItem,
 } from './adapter'
-import { mockAggregate, mockPosts, mockPostDetail, mockPage, mockComments, mockFriends, mockCategories, mockNote, mockSays, mockRecently } from './mock'
+import {
+  mockAggregate,
+  mockPosts,
+  mockPostDetail,
+  mockPage,
+  mockComments,
+  mockFriends,
+  mockCategories,
+  mockNote,
+  mockSays,
+  mockRecently,
+} from './mock'
 import { classifyNoteResponse, type NoteAccess } from './note-access'
 import { ipForwardHeaders } from './proxy'
 
@@ -53,13 +64,14 @@ import { ipForwardHeaders } from './proxy'
  * IP 的取值规则与 route handler 共用 `ipForwardHeaders`（按可信代理层数从链条右侧取），
  * 不把浏览器可伪造的 `x-forwarded-for` 原样透传。
  */
-function ssrHeaders(): Record<string, string> {
+async function ssrHeaders(): Promise<Record<string, string>> {
   const out: Record<string, string> = {
     'User-Agent': MX_SSR_UA,
     Accept: 'application/json',
   }
   try {
-    Object.assign(out, ipForwardHeaders(headers()))
+    // Next 15 起 headers() 返回 Promise，同步取会被当作在请求作用域外访问
+    Object.assign(out, ipForwardHeaders(await headers()))
   } catch {
     // 构建期（无请求上下文）取不到 headers，忽略即可
   }
@@ -73,7 +85,7 @@ async function get<T>(path: string): Promise<T> {
     return null as T
   }
   const res = await fetch(apiUrl(path), {
-    headers: ssrHeaders(),
+    headers: await ssrHeaders(),
     cache: 'no-store',
   })
   if (!res.ok) {
@@ -119,9 +131,7 @@ export async function fetchSnippet(
   name: string,
 ): Promise<Record<string, unknown> | null> {
   if (!hasCore()) return null
-  const raw = await get<Record<string, unknown>>(
-    `/snippets/${refType}/${name}`,
-  )
+  const raw = await get<Record<string, unknown>>(`/snippets/${refType}/${name}`)
   if (!raw) return null
   // core v12.x 直接返回 snippet 内容本身（可能是 JSON 对象，也可能是纯字符串）；
   // 旧版本是 { data: {...} } 信封，两者都兼容
@@ -151,10 +161,7 @@ export async function fetchPosts(page = 1, size = 10): Promise<PostsListResult> 
   return { items, pagination }
 }
 
-export async function fetchPostDetail(
-  category: string,
-  slug: string,
-): Promise<PostDetail | null> {
+export async function fetchPostDetail(category: string, slug: string): Promise<PostDetail | null> {
   if (!hasCore()) {
     return mockPostDetail
   }
@@ -234,9 +241,7 @@ export interface CategoryDetail {
  * core 返回 { data: { ...category, children: Post[] } }。
  * 注意 children 不过滤未发布，前端需要自己剔除 isPublished === false 的项。
  */
-export async function fetchCategoryDetail(
-  slug: string,
-): Promise<CategoryDetail | null> {
+export async function fetchCategoryDetail(slug: string): Promise<CategoryDetail | null> {
   if (!hasCore()) {
     const category = mockCategories.find((c) => c.slug === slug)
     if (!category) return null
@@ -245,14 +250,10 @@ export async function fetchCategoryDetail(
       posts: mockPosts.filter((p) => p.categorySlug === slug),
     }
   }
-  const raw = await get<Record<string, unknown>>(
-    `/categories/${encodeURIComponent(slug)}`,
-  )
+  const raw = await get<Record<string, unknown>>(`/categories/${encodeURIComponent(slug)}`)
   if (!raw) return null
   const data = (raw.data ?? raw) as Record<string, unknown>
-  const children = Array.isArray(data.children)
-    ? (data.children as Record<string, unknown>[])
-    : []
+  const children = Array.isArray(data.children) ? (data.children as Record<string, unknown>[]) : []
   return {
     category: adaptCategory(data),
     posts: children.map(adaptPost).filter((p) => p.isPublished !== false),
@@ -267,13 +268,9 @@ export async function fetchPostsByTag(tag: string): Promise<PostSummary[]> {
   if (!hasCore()) {
     return mockPosts.filter((p) => p.tags?.includes(tag))
   }
-  const raw = await get<Record<string, unknown>>(
-    `/categories/${encodeURIComponent(tag)}?tag=true`,
-  )
+  const raw = await get<Record<string, unknown>>(`/categories/${encodeURIComponent(tag)}?tag=true`)
   if (!raw) return []
-  const arr = Array.isArray(raw.data)
-    ? (raw.data as Record<string, unknown>[])
-    : []
+  const arr = Array.isArray(raw.data) ? (raw.data as Record<string, unknown>[]) : []
   return arr.map(adaptPost).filter((p) => p.isPublished !== false)
 }
 
@@ -288,9 +285,7 @@ export async function fetchComments(
     return { items: mockComments }
   }
   // ref 由路径里的 refId 决定，GET 不需要 ref 参数；sort 默认 pinned（置顶优先）
-  const raw = await get<unknown>(
-    `/comments/ref/${refId}?page=${page}&size=${size}`,
-  )
+  const raw = await get<unknown>(`/comments/ref/${refId}?page=${page}&size=${size}`)
   if (!raw) return { items: [] }
   const unwrapped = unwrap<Record<string, unknown>[]>(raw)
   const items = (Array.isArray(unwrapped) ? unwrapped : []).map(adaptComment)
@@ -314,10 +309,7 @@ export async function fetchFriends(): Promise<FriendLink[]> {
 /** 日记详情；有密码的日记需要传 password，否则 core 返回 403 且正文被隐藏 */
 export type { NoteAccess }
 
-export async function fetchNoteWithAccess(
-  nid: string,
-  password?: string,
-): Promise<NoteAccess> {
+export async function fetchNoteWithAccess(nid: string, password?: string): Promise<NoteAccess> {
   if (!hasCore()) {
     return { note: mockNote, locked: false, reason: 'ok' }
   }
@@ -327,7 +319,7 @@ export async function fetchNoteWithAccess(
   let res: Response
   try {
     res = await fetch(apiUrl(`/notes/nid/${nid}${qs}`), {
-      headers: ssrHeaders(),
+      headers: await ssrHeaders(),
       cache: 'no-store',
     })
   } catch {
@@ -338,10 +330,7 @@ export async function fetchNoteWithAccess(
   return classifyNoteResponse(res.status, body)
 }
 
-export async function fetchNote(
-  nid: string,
-  password?: string,
-): Promise<Note | null> {
+export async function fetchNote(nid: string, password?: string): Promise<Note | null> {
   return (await fetchNoteWithAccess(nid, password)).note
 }
 
@@ -436,9 +425,7 @@ export async function fetchSearch(keyword: string): Promise<PostSummary[]> {
     // mock：按标题/摘要模糊匹配
     const kw = keyword.toLowerCase()
     return mockPosts.filter(
-      (p) =>
-        p.title.toLowerCase().includes(kw) ||
-        (p.summary || '').toLowerCase().includes(kw),
+      (p) => p.title.toLowerCase().includes(kw) || (p.summary || '').toLowerCase().includes(kw),
     )
   }
   const raw = await get<unknown>(`/search/post?keyword=${encodeURIComponent(keyword)}`)
@@ -448,8 +435,7 @@ export async function fetchSearch(keyword: string): Promise<PostSummary[]> {
     // core 的 highlight.snippet 为 string | null（没有命中片段时是 null），
     // 只有非空字符串才覆盖摘要，否则保留 adaptPost 的兜底结果
     const highlight = item.highlight as Record<string, unknown> | undefined
-    const snippet =
-      typeof highlight?.snippet === 'string' ? highlight.snippet.trim() : ''
+    const snippet = typeof highlight?.snippet === 'string' ? highlight.snippet.trim() : ''
     return snippet ? { ...post, summary: snippet } : post
   })
 }
@@ -506,9 +492,7 @@ export async function fetchAdjacentPosts(
  */
 export async function fetchRecentPosts(size = 6): Promise<PostSummary[]> {
   if (!hasCore()) return mockPosts.slice(0, size)
-  const raw = await get<unknown>(
-    `/posts?size=${size}&sortBy=createdAt&sortOrder=desc&truncate=200`,
-  )
+  const raw = await get<unknown>(`/posts?size=${size}&sortBy=createdAt&sortOrder=desc&truncate=200`)
   if (!raw) return []
   const unwrapped = unwrap<Record<string, unknown>[]>(raw)
   return (Array.isArray(unwrapped) ? unwrapped : []).map(adaptPost)
@@ -548,9 +532,7 @@ export async function fetchRecentComments(): Promise<RecentComment[]> {
   const raw = await get<Record<string, unknown>>('/activity/recent')
   if (!raw) return []
   const payload = (raw.data ?? raw) as Record<string, unknown>
-  const arr = Array.isArray(payload.comment)
-    ? (payload.comment as Record<string, unknown>[])
-    : []
+  const arr = Array.isArray(payload.comment) ? (payload.comment as Record<string, unknown>[]) : []
   return arr.map((c) => {
     const p = camelKeys<Record<string, unknown>>(c)
     const type = String(p.type ?? 'post').toLowerCase()

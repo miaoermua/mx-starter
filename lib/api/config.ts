@@ -10,8 +10,7 @@ export const MX_API_PREFIX = process.env.MX_API_PREFIX || '/api/v2'
 
 export const MX_CORE_URL = process.env.MX_CORE_URL || ''
 
-export const MX_SSR_UA =
-  process.env.MX_SSR_UA || 'mx-space-mx-starter/0.1.0'
+export const MX_SSR_UA = process.env.MX_SSR_UA || 'mx-space-mx-starter/0.1.0'
 
 /**
  * 主题名：对应 core 后台 Snippet 的 name（reference='theme'、公开），

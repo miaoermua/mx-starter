@@ -23,9 +23,7 @@ export function renderMarkdown(text: string): string {
 
 /* ---------- 链接卡片分段渲染 —— 【脚手架自带：kami 扩展移植，可整组移除】 ---------- */
 
-export type MarkdownSegment =
-  | { type: 'html'; html: string }
-  | { type: 'card'; ref: string }
+export type MarkdownSegment = { type: 'html'; html: string } | { type: 'card'; ref: string }
 
 export interface MarkdownSegmentsResult {
   segments: MarkdownSegment[]

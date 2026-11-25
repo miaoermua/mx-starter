@@ -7,16 +7,14 @@ import { fetchPostsByTag } from '@/lib/api'
  * 数据来自 core GET /categories/:tag?tag=true（返回该标签下文章）。
  * core 这里不过滤未发布，fetchPostsByTag 已剔除 isPublished === false 的项。
  */
-export async function generateMetadata({ params }: { params: { name: string } }) {
-  return { title: `标签：${decodeURIComponent(params.name)}` }
+export async function generateMetadata({ params }: { params: Promise<{ name: string }> }) {
+  const { name } = await params
+  return { title: `标签：${decodeURIComponent(name)}` }
 }
 
-export default async function TagPage({
-  params,
-}: {
-  params: { name: string }
-}) {
-  const name = decodeURIComponent(params.name)
+export default async function TagPage({ params }: { params: Promise<{ name: string }> }) {
+  const { name: rawName } = await params
+  const name = decodeURIComponent(rawName)
   const posts = await fetchPostsByTag(name)
 
   return (
@@ -33,9 +31,7 @@ export default async function TagPage({
             {posts.map((post) => (
               <div className="post-item" key={post.id}>
                 <h2>
-                  <Link
-                    href={`/posts/${post.categorySlug || 'uncategorized'}/${post.slug}`}
-                  >
+                  <Link href={`/posts/${post.categorySlug || 'uncategorized'}/${post.slug}`}>
                     {post.title}
                   </Link>
                 </h2>

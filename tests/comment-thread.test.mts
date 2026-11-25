@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-  buildReplyTree,
-  nestCommentReplies,
-  type Comment,
-} from '../lib/api/adapter.ts'
+import { buildReplyTree, nestCommentReplies, type Comment } from '../lib/api/adapter.ts'
 import { flattenThread, mergeThreadPage } from '../lib/api/comment-thread.ts'
 
 function reply(id: string, parent?: string, root?: string): Comment {

@@ -53,7 +53,12 @@ export function CommentForm({
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        setData((d) => ({ ...d, author: parsed.author || '', mail: parsed.mail || '', url: parsed.url || '' }))
+        setData((d) => ({
+          ...d,
+          author: parsed.author || '',
+          mail: parsed.mail || '',
+          url: parsed.url || '',
+        }))
       }
     } catch {}
   }, [])
@@ -87,8 +92,20 @@ export function CommentForm({
       // url 为空时不传，避免后端 422（core 要求 url 非空则必须合法）
       // id：普通评论是文章 id，回复是被回复评论的 id；ref 由 core 自动判定，不发送
       const payload = replyTo
-        ? { author: data.author, mail: data.mail, text: data.text, url: data.url || undefined, id: replyTo }
-        : { author: data.author, mail: data.mail, text: data.text, url: data.url || undefined, id: postId }
+        ? {
+            author: data.author,
+            mail: data.mail,
+            text: data.text,
+            url: data.url || undefined,
+            id: replyTo,
+          }
+        : {
+            author: data.author,
+            mail: data.mail,
+            text: data.text,
+            url: data.url || undefined,
+            id: postId,
+          }
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

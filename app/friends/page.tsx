@@ -68,12 +68,7 @@ export default async function FriendsPage() {
                           <p>{f.description}</p>
                         </div>
                       ) : (
-                        <a
-                          className="link-friend"
-                          href={f.url}
-                          target="_blank"
-                          rel="nofollow"
-                        >
+                        <a className="link-friend" href={f.url} target="_blank" rel="nofollow">
                           {f.avatar && (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={f.avatar} alt={f.name} />

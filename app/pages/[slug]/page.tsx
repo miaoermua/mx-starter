@@ -11,18 +11,12 @@ import { CommentSection } from '@/components/comment/CommentSection'
  * DOM 契约：section.page-title > h2；article.page-content（特殊页加 .is-special）
  * 独立页面同样支持阅读上报与评论（core 的 ack type 可为 page）。
  */
-export default async function PagePage({
-  params,
-}: {
-  params: { slug: string }
-}) {
-  const page = await fetchPage(params.slug)
+export default async function PagePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const page = await fetchPage(slug)
   if (!page) notFound()
 
-  const [comments, aggregate] = await Promise.all([
-    fetchComments(page.id, 1, 10),
-    getAggregate(),
-  ])
+  const [comments, aggregate] = await Promise.all([fetchComments(page.id, 1, 10), getAggregate()])
   const commentTotal = comments.pagination?.total ?? comments.items.length
   const html = renderMarkdown(page.text)
 

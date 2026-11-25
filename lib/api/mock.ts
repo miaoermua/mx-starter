@@ -129,8 +129,24 @@ export const mockComments: Comment[] = [
 ]
 
 export const mockFriends: FriendLink[] = [
-  { id: 'f1', name: '示例友链', url: 'https://example.com', avatar: '', description: '一个示例友链', type: 0, state: 0 },
-  { id: 'f2', name: 'Example Blog', url: 'https://example.com', avatar: '', description: '一个示例博客', type: 1, state: 0 },
+  {
+    id: 'f1',
+    name: '示例友链',
+    url: 'https://example.com',
+    avatar: '',
+    description: '一个示例友链',
+    type: 0,
+    state: 0,
+  },
+  {
+    id: 'f2',
+    name: 'Example Blog',
+    url: 'https://example.com',
+    avatar: '',
+    description: '一个示例博客',
+    type: 1,
+    state: 0,
+  },
 ]
 
 import type { Note, Recently, Say } from './adapter'
@@ -152,6 +168,10 @@ export const mockSays: Say[] = [
 ]
 
 export const mockRecently: Recently[] = [
-  { id: 'r1', content: '更新了文章《用 Next.js 重写博客前端》', created: '2026-10-20T08:30:00.000Z' },
+  {
+    id: 'r1',
+    content: '更新了文章《用 Next.js 重写博客前端》',
+    created: '2026-10-20T08:30:00.000Z',
+  },
   { id: 'r2', content: '用 mx-starter 起了一个新主题', created: '2026-11-05T10:00:00.000Z' },
 ]

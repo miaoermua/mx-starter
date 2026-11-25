@@ -49,21 +49,23 @@ export function unwrap<T>(raw: unknown): T {
 /** 从 Markdown 正文提取摘要（core 的 summary 字段常为空） */
 function extractSummary(text?: string): string | undefined {
   if (!text) return undefined
-  return text
-    // 去掉 HTML 标签
-    .replace(/<[^>]+>/g, '')
-    // 去掉 Markdown 图片/链接语法
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // 去掉 Markdown 标题/引用/代码标记
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/^>\s+/gm, '')
-    .replace(/`{1,3}/g, '')
-    // 去掉多余空白
-    .replace(/\n+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 100)
+  return (
+    text
+      // 去掉 HTML 标签
+      .replace(/<[^>]+>/g, '')
+      // 去掉 Markdown 图片/链接语法
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      // 去掉 Markdown 标题/引用/代码标记
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/^>\s+/gm, '')
+      .replace(/`{1,3}/g, '')
+      // 去掉多余空白
+      .replace(/\n+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100)
+  )
 }
 
 /* ---------- 分页 ---------- */
@@ -137,7 +139,6 @@ export interface PageDetail {
 /** 适配单条文章摘要（来自列表） */
 export function adaptPost(raw: AnyObj): PostSummary {
   const p = camelKeys<AnyObj>(raw)
-  const count = p.count as AnyObj | undefined
   return {
     id: String(p.id ?? p._id ?? ''),
     title: String(p.title ?? ''),
@@ -156,15 +157,11 @@ export function adaptPost(raw: AnyObj): PostSummary {
       like: p.likeCount as number | undefined,
     },
     // cover 可能是字符串或 { src, ... } 对象
-    cover: typeof p.cover === 'string'
-      ? p.cover
-      : (p.cover as AnyObj)?.src as string | undefined,
+    cover: typeof p.cover === 'string' ? p.cover : ((p.cover as AnyObj)?.src as string | undefined),
     // images 元素可能是 { src, type, ... } 对象或字符串
     images: Array.isArray(p.images)
       ? p.images
-          .map((img: unknown) =>
-            typeof img === 'string' ? img : (img as AnyObj)?.src,
-          )
+          .map((img: unknown) => (typeof img === 'string' ? img : (img as AnyObj)?.src))
           .filter((s: unknown): s is string => typeof s === 'string')
       : undefined,
   }
@@ -178,9 +175,7 @@ export function adaptPostDetail(raw: AnyObj): PostDetail {
     ...base,
     text: String(p.text ?? ''),
     contentFormat: p.contentFormat as string | undefined,
-    related: Array.isArray(p.related)
-      ? (p.related as AnyObj[]).map(adaptPost)
-      : undefined,
+    related: Array.isArray(p.related) ? (p.related as AnyObj[]).map(adaptPost) : undefined,
     liked: p.liked as boolean | undefined,
   }
 }

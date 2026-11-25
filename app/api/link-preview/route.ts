@@ -9,20 +9,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  LinkPreviewError,
-  fetchLinkMetadata,
-} from '@/lib/link-preview'
+import { LinkPreviewError, fetchLinkMetadata } from '@/lib/link-preview'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
   const queryValue = req.nextUrl.searchParams.get('url')
   if (!queryValue) {
-    return NextResponse.json(
-      { error: 'Missing url query parameter' },
-      { status: 400 },
-    )
+    return NextResponse.json({ error: 'Missing url query parameter' }, { status: 400 })
   }
 
   try {
@@ -32,9 +26,6 @@ export async function GET(req: NextRequest) {
     if (err instanceof LinkPreviewError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
-    return NextResponse.json(
-      { error: 'Failed to fetch metadata' },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: 'Failed to fetch metadata' }, { status: 500 })
   }
 }

@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-  adaptComment,
-  adaptNote,
-  adaptPostDetail,
-  adaptSay,
-} from '../lib/api/adapter.ts'
+import { adaptComment, adaptNote, adaptPostDetail, adaptSay } from '../lib/api/adapter.ts'
 
 test('adaptSay 读 core 的 text 字段（v12.x），并保留 source/author', () => {
   const say = adaptSay({

@@ -1,6 +1,6 @@
 # mx-starter
 
-Mix Space **通用主题脚手架**（core **v12.x / API v2** · Next.js 14 App Router · 零样式依赖）
+Mix Space **通用主题脚手架**（core **v12.x / API v2** · Next.js 16 App Router · 零样式依赖）
 
 目标：覆盖 mx 全部访客侧特性（文章 / 页面 / 分类 / 标签 / 评论 / 友链 / 日记 / 说说 / 动态 / 时间轴 / 搜索 / 点赞阅读数 / RSS / 站点地图）的通用模板——做自己的主题时只换样式和组件，数据层与页面骨架零改动。
 
@@ -8,13 +8,17 @@ Mix Space **通用主题脚手架**（core **v12.x / API v2** · Next.js 14 App 
 
 ## 快速开始
 
+需要 Node.js >= 22.12（Next 16 的下限），包管理器用 pnpm。
+
 ```bash
-npm install
+pnpm install
 cp .env.example .env   # 不配置 core 也能跑（自动 mock）
-npm run dev
+pnpm dev
 ```
 
 接入真实 core：把 `.env` 的 `MX_CORE_URL` 改成你的实例地址，重启即可，代码零改动。
+
+提交前跑 `pnpm verify`（typecheck → lint → test → build）；只想检查格式用 `pnpm format:check`。
 
 ## 主题配置（core Snippet）
 
@@ -34,16 +38,16 @@ public/vendor/prism.js  代码高亮运行时
 
 ## Markdown（按 core 语法标准实现）
 
-| 语法 | 产物 |
-| --- | --- |
-| `\|\|剧透\|\|` | `<span class="spoiler">` |
-| `$E=mc^2$` | `<span class="katex-render">`（公式渲染接主题的 KaTeX） |
-| `{GH@user}` `{TW@user}` `{TG@user}` | `<a class="mention">` |
-| `::: gallery` … `:::` | `<div class="container">` 图片组 |
-| `::: banner {params}` … `:::` | `<div class="container banner {params}">` |
-| `![!图注](/img.jpg)` | `<figure><img><figcaption>` |
-| ` ```mermaid ` | `<pre class="mermaid">` |
-| `[^1]: URL` + `[^1]` | 链接卡片（脚手架自带扩展，可移除） |
+| 语法                                | 产物                                                    |
+| ----------------------------------- | ------------------------------------------------------- |
+| `\|\|剧透\|\|`                      | `<span class="spoiler">`                                |
+| `$E=mc^2$`                          | `<span class="katex-render">`（公式渲染接主题的 KaTeX） |
+| `{GH@user}` `{TW@user}` `{TG@user}` | `<a class="mention">`                                   |
+| `::: gallery` … `:::`               | `<div class="container">` 图片组                        |
+| `::: banner {params}` … `:::`       | `<div class="container banner {params}">`               |
+| `![!图注](/img.jpg)`                | `<figure><img><figcaption>`                             |
+| ` ```mermaid `                      | `<pre class="mermaid">`                                 |
+| `[^1]: URL` + `[^1]`                | 链接卡片（脚手架自带扩展，可移除）                      |
 
 通用：标题自动加 `id="title-N"`，代码块带 `language-xxx` 供 Prism 高亮，站外链接自动 `target=_blank`。实现见 `lib/markdown-extensions.ts`。
 
